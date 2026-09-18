@@ -12,6 +12,7 @@ export async function POST(request: Request) {
       marketplaceId: input.marketplaceId,
       path: `/products/fees/v0/${resource}/${encodeURIComponent(input.identifier)}/feesEstimate`,
       method: "POST",
+      environment: input.environment,
       body: {
         FeesEstimateRequest: {
           MarketplaceId: input.marketplaceId,
