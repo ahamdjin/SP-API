@@ -886,8 +886,8 @@ function numberField(fields: Fields, key: string, min: number, max: number, fall
   const raw = fields[key];
   if (raw === undefined || raw === "") return fallback;
   const value = Number(raw);
-  if (!Number.isInteger(value) || value < min || value > max) {
-    throw new SpApiError(key + " must be between " + min + " and " + max, 400, null, "INVALID_NUMBER");
+  if (!Number.isFinite(value) || value < min || value > max) {
+    throw new SpApiError(key + " must be a number between " + min + " and " + max, 400, null, "INVALID_NUMBER");
   }
   return value;
 }
