@@ -11,7 +11,7 @@ A local workbench for testing Amazon Selling Partner API credentials and running
 - Structured catalogue results with all returned images plus complete raw JSON
 - Product Fees API v0 estimates for ASINs and seller SKUs
 - FBA inventory summaries
-- Order search and full order retrieval using Orders API `2026-01-01`, requesting every optional data group
+- Order search and full order retrieval using Orders API `2026-01-01`; core datasets are requested by default and buyer/recipient PII is opt-in when the app has the required roles
 - Report listing, creation, status, and document URL retrieval
 - Feed listing, status, document upload/submission, and processing-report download
 - FBA inbound plan, shipment, prep, plan creation, asynchronous operation-status verification, and item-label tools using Fulfillment Inbound `2024-03-20`
@@ -169,6 +169,42 @@ An HTTP success response can mean that Amazon accepted a job, not that the job u
 - **FBA inbound:** operations such as creating an inbound plan can return an `operationId`. Use **Operation status** (`GET /inbound/fba/2024-03-20/operations/{operationId}`) and inspect `operationStatus` and `operationProblems` before treating the action as completed.
 
 The workbench also preserves the special double-percent encoding required by `listPrepDetails` for MSKUs containing `%`, `+`, or `,`, and exposes the optional package/pagination parameters required by additional legacy `getLabels` scenarios.
+
+
+## Production input checklist
+
+Use seller-owned data from the same marketplace selected in the workbench. IDs returned by one operation should be used for the next operation in that workflow instead of made-up placeholders.
+
+| Operation | What to enter in Production | Expected result |
+| --- | --- | --- |
+| Catalogue item | Real ASIN, UPC/EAN/GTIN, seller SKU + seller ID, or keywords | Product/catalogue datasets and images; keyword searches can return a next-page token |
+| Fee estimate | Real ASIN or seller SKU, listing price, shipping amount, FBA/Merchant | Fee status, total estimate, and fee detail list |
+| FBA inventory | Marketplace; optional seller SKUs / changed-since time | Inventory summaries and quantities; may return a short-lived next token |
+| Search orders | Created-after time; optional created-before, statuses and fulfilment filter | Orders and next-page token; buyer/recipient PII is disabled by default |
+| Get order | `orderId` returned by Search orders | Full core order object; optionally buyer/recipient data when PII access is enabled |
+| List reports | One or more report types such as `GET_MERCHANT_LISTINGS_ALL_DATA`; optional status/time filters | Matching report jobs and next token |
+| Request report | Supported report type; optional start/end dates where that report type accepts them | `reportId` |
+| Report status | `reportId` | Processing status and `reportDocumentId` when DONE |
+| Report document | `reportDocumentId` | Presigned document URL plus workbench preview when text-readable |
+| List feeds | Feed type such as `JSON_LISTINGS_FEED`; optional status/time filters | Matching feed jobs and next token |
+| Feed status | `feedId` | Processing status and `resultFeedDocumentId` when Amazon produces one |
+| Feed processing report | `resultFeedDocumentId` | Presigned processing-report URL and preview |
+| Submit feed | `JSON_LISTINGS_FEED`, JSON content type, and a complete valid feed payload | `inputFeedDocumentId`, then `feedId`; the workbench validates the basic JSON feed structure before upload |
+| List inbound plans | Optional plan status/sort/page size | Inbound plans and next token |
+| Get inbound plan | `inboundPlanId` returned by List/Create plan | Plan, packing/placement options and shipment summaries |
+| Get shipment | `inboundPlanId` + `shipmentId` from the plan | Shipment destination, status, tracking/transportation data |
+| Inbound operation status | `operationId` returned by an inbound write | SUCCESS / IN_PROGRESS / FAILED and any operation problems |
+| Prep details | Real MSKUs, one per line | Prep categories/types and owner constraints |
+| Create inbound plan | Real ship-from address and items as `MSKU, quantity, prepOwner, labelOwner` | `inboundPlanId` + `operationId` |
+| Item labels | `MSKU, quantity` rows, label format and page type | One or more expiring document-download URLs |
+| Shipment labels | Real shipment ID plus label/page type; package/pallet values when applicable | Amazon-generated label download URL |
+| Bill of lading | Real eligible shipment ID | Amazon-generated bill-of-lading URL when that shipment supports one |
+
+### Recommended first Production tests
+
+Start with read-only operations in this order: connection test → Catalogue item → Fee estimate → FBA inventory → Search orders (PII off) → List reports → List feeds → List inbound plans. These verify credentials, roles, marketplace routing, pagination, and response rendering without creating or changing Amazon resources.
+
+For writes, **Request report** is the safest next test because it creates a report job rather than changing a listing or shipment. Do not use **Submit feed** or **Create inbound plan** as generic connectivity tests; use them only with deliberate seller data and a payload you actually intend Amazon to process.
 
 ## API references
 
