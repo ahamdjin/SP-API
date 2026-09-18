@@ -32,19 +32,26 @@ import {
 } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 import { extractCatalogItems, type CatalogItemView, type DetailRow, type ProductImage } from "@/lib/catalog-view";
-import { getMarketplace, marketplaces } from "@/lib/marketplaces";
+import { getMarketplace, marketplaces, type SpApiEnvironment } from "@/lib/marketplaces";
 
 type Credentials = { clientId: string; clientSecret: string; refreshToken: string };
+type ApiProblem = {
+  code: string;
+  message: string;
+  details: string | null;
+  action: string;
+  retryable: boolean;
+};
 type ApiResult = {
   ok?: boolean; status?: number; statusText?: string; requestId?: string | null;
-  rateLimit?: string | null; durationMs?: number; data?: unknown; error?: string;
-  details?: unknown; message?: string; expiresIn?: number;
+  rateLimit?: string | null; durationMs?: number; attempts?: number; data?: unknown; error?: string;
+  details?: unknown; message?: string; expiresIn?: number; problem?: ApiProblem | null;
 };
 type Operation =
   | "catalog" | "fees" | "inventory" | "orders" | "order"
   | "reports" | "createReport" | "report" | "reportDocument"
-  | "feeds" | "feed" | "submitFeed"
-  | "inboundPlans" | "inboundPlan" | "inboundShipment"
+  | "feeds" | "feed" | "feedDocument" | "submitFeed"
+  | "inboundPlans" | "inboundPlan" | "inboundShipment" | "inboundOperationStatus"
   | "prepDetails" | "createInboundPlan" | "itemLabels"
   | "shipmentLabels" | "billOfLading"
   | "legacyConvert" | "legacyFc";
@@ -113,6 +120,7 @@ const operationGroups: Array<{ label: string; items: OperationItem[] }> = [
     items: [
       { id: "feeds", label: "List feeds", description: "Review feed jobs", icon: ListChecks, kind: "read" },
       { id: "feed", label: "Feed status", description: "Inspect a feed by ID", icon: FileSearch, kind: "read" },
+      { id: "feedDocument", label: "Feed processing report", description: "Download and inspect record-level results", icon: FileSearch, kind: "read" },
       { id: "submitFeed", label: "Submit feed", description: "Upload and start a feed", icon: Send, kind: "write" },
     ],
   },
@@ -122,6 +130,7 @@ const operationGroups: Array<{ label: string; items: OperationItem[] }> = [
       { id: "inboundPlans", label: "List plans", description: "Active, shipped or voided plans", icon: Truck, kind: "read" },
       { id: "inboundPlan", label: "Get plan", description: "Inspect an inbound plan", icon: PackageCheck, kind: "read" },
       { id: "inboundShipment", label: "Get shipment", description: "Plan and shipment details", icon: Truck, kind: "read" },
+      { id: "inboundOperationStatus", label: "Operation status", description: "Verify asynchronous inbound operations", icon: ListChecks, kind: "read" },
       { id: "prepDetails", label: "Prep details", description: "Prep instructions by MSKU", icon: ListChecks, kind: "read" },
       { id: "createInboundPlan", label: "Create plan", description: "Address and SKU quantities", icon: PackagePlus, kind: "write" },
       { id: "itemLabels", label: "Item labels", description: "Create printable MSKU labels", icon: Tags, kind: "read" },
@@ -140,6 +149,7 @@ const operationGroups: Array<{ label: string; items: OperationItem[] }> = [
 
 export function Workbench() {
   const [credentials, setCredentials] = useState(initialCredentials);
+  const [environment, setEnvironment] = useState<SpApiEnvironment>("sandbox");
   const [showSecrets, setShowSecrets] = useState(false);
   const [marketplaceId, setMarketplaceId] = useState("ATVPDKIKX0DER");
   const [operation, setOperation] = useState<Operation>("catalog");
@@ -186,7 +196,7 @@ export function Workbench() {
     setConnectionState("testing");
     setConnectionMessage("Requesting token…");
     try {
-      const response = await postJson("/api/sp-api/test", credentials);
+      const response = await postJson("/api/sp-api/test", { ...credentials, marketplaceId, environment });
       if (!response.ok) throw new Error(response.error ?? "Connection failed");
       setConnectionState("ready");
       setConnectionMessage("Connected · token valid " + Math.round((response.expiresIn ?? 3600) / 60) + " min");
@@ -201,16 +211,17 @@ export function Workbench() {
     if (activeItem.kind === "legacy") return;
 
     let url = "/api/sp-api/operations";
-    let payload: unknown = { ...credentials, marketplaceId, operation, fields };
+    let payload: unknown = { ...credentials, marketplaceId, environment, operation, fields };
     if (operation === "catalog") {
       url = "/api/sp-api/catalog";
-      payload = { ...credentials, marketplaceId, ...catalog };
+      payload = { ...credentials, marketplaceId, environment, ...catalog };
     }
     if (operation === "fees") {
       url = "/api/sp-api/fees";
       payload = {
         ...credentials,
         marketplaceId,
+        environment,
         ...fees,
         currency: marketplace.currency,
         price: Number(fees.price),
@@ -264,22 +275,32 @@ export function Workbench() {
             <Field label="LWA client ID" required><input autoComplete="off" required placeholder="amzn1.application-oa2-client…" type={showSecrets ? "text" : "password"} value={credentials.clientId} onChange={(event) => updateCredential("clientId", event.target.value)} /></Field>
             <Field label="LWA client secret" required><input autoComplete="off" required placeholder="Enter client secret" type={showSecrets ? "text" : "password"} value={credentials.clientSecret} onChange={(event) => updateCredential("clientSecret", event.target.value)} /></Field>
             <Field label="Refresh token" required><textarea autoComplete="off" required placeholder="Atzr|…" rows={4} value={credentials.refreshToken} onChange={(event) => updateCredential("refreshToken", event.target.value)} style={showSecrets ? undefined : { WebkitTextSecurity: "disc" } as React.CSSProperties} /></Field>
+            <Field label="Environment" required>
+              <select required value={environment} onChange={(event) => { setEnvironment(event.target.value as SpApiEnvironment); setConnectionState("idle"); setConnectionMessage("Environment changed"); }}>
+                <option value="sandbox">Sandbox · no production data</option>
+                <option value="production">Production · live seller account</option>
+              </select>
+            </Field>
             <Field label="Marketplace" required>
               <select required value={marketplaceId} onChange={(event) => setMarketplaceId(event.target.value)}>
                 {marketplaces.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.currency} · {item.id}</option>)}
               </select>
             </Field>
+            <div className={"security-note " + (environment === "production" ? "production-warning" : "")}>
+              <ShieldCheck size={16} />
+              <p>{environment === "sandbox" ? "Sandbox calls use Amazon's mock/test endpoints and do not change production seller data." : "Production mode calls the live seller account. Keep write confirmations enabled and test the same workflow in Sandbox first."}</p>
+            </div>
           </div>
           <button className="secondary-button full-width" type="submit" disabled={!credentialsComplete || connectionState === "testing"}>
-            {connectionState === "testing" ? <LoaderCircle className="spin" size={16} /> : <KeyRound size={16} />} Test credentials
+            {connectionState === "testing" ? <LoaderCircle className="spin" size={16} /> : <KeyRound size={16} />} Test {environment} connection
           </button>
-          <div className="security-note"><ShieldCheck size={16} /><p>The current standard SP-API flow needs LWA credentials, not the AWS keys stored in the old desktop app.</p></div>
+          <div className="security-note"><ShieldCheck size={16} /><p>This test verifies both LWA token exchange and a Sellers API call. AWS IAM keys are not required for normal SP-API requests.</p></div>
         </form>
 
         <section className="query-panel">
           <div className="workspace-heading">
             <div><span className="section-index">02</span><h2>Request builder</h2></div>
-            <span className="region-label">{marketplace.name} / {marketplace.region.toUpperCase()}</span>
+            <span className="region-label">{environment.toUpperCase()} · {marketplace.name} / {marketplace.region.toUpperCase()}</span>
           </div>
 
           <OperationPicker active={operation} onChange={(next) => { setOperation(next); setResult(null); setFields((current) => ({ ...current, confirmed: false })); }} />
@@ -322,11 +343,11 @@ export function Workbench() {
           <div className="result-area">
             <div className="result-heading">
               <div><span className="section-index">03</span><h2>Result</h2></div>
-              {result && <div className="request-meta">{typeof result.status === "number" && <span className={result.ok ? "status-success" : "status-error"}>{result.status} {result.statusText}</span>}{typeof result.durationMs === "number" && <span>{result.durationMs} ms</span>}{result.rateLimit && <span>{result.rateLimit} req/s</span>}</div>}
+              {result && <div className="request-meta">{typeof result.status === "number" && <span className={result.ok ? "status-success" : "status-error"}>{result.status} {result.statusText}</span>}{typeof result.durationMs === "number" && <span>{result.durationMs} ms</span>}{typeof result.attempts === "number" && result.attempts > 1 && <span>{result.attempts} attempts</span>}{result.rateLimit && <span>{result.rateLimit} req/s</span>}</div>}
             </div>
             {!result && !isLoading && <div className="empty-state"><Braces size={24} /><p>Run the selected operation to inspect Amazon&apos;s response.</p></div>}
             {isLoading && <div className="empty-state loading-state"><LoaderCircle className="spin" size={24} /><p>Waiting for Amazon…</p></div>}
-            {result && !result.ok && <div className="error-banner"><X size={18} /><div><strong>Request failed</strong><p>{result.error ?? extractAmazonError(result.data)}</p></div></div>}
+            {result && !result.ok && <div className="error-banner"><X size={18} /><div><strong>{result.problem?.code ? "Request failed · " + result.problem.code : "Request failed"}</strong><p>{result.problem?.message ?? result.error ?? extractAmazonError(result.data)}</p>{result.problem?.details && <p><strong>Details:</strong> {result.problem.details}</p>}{result.problem?.action && <p><strong>What to do:</strong> {result.problem.action}</p>}{result.requestId && <p><strong>Amazon request ID:</strong> <code>{result.requestId}</code></p>}</div></div>}
             {result?.ok && operation === "catalog" && <div className="catalog-results">
               {catalogFamily && <div className={"family-summary " + (catalogFamily.complete ? "complete" : "partial")}><strong>{catalogFamily.returnedCount} of {catalogFamily.requestedCount} related records returned</strong><span>{catalogFamily.complete ? "Complete variation and package relationship graph" : "Partial related set — see warnings in the JSON response"}</span></div>}
               {catalogItems.length === 0 ? <p className="no-results">Amazon returned no catalogue items.</p> : <CatalogProductView key={catalogItems.map((item) => item.asin).join("|")} items={catalogItems} />}
@@ -445,6 +466,9 @@ function OperationFields({
     case "feed":
       content = text("feedId", "Feed ID", "123456789", true);
       break;
+    case "feedDocument":
+      content = <>{text("feedDocumentId", "Result feed document ID", "Use resultFeedDocumentId returned after the feed is DONE", true)}<div className="dataset-note"><Check size={15} /><span>Downloads a safe 2 MB text preview of Amazon's processing report so record-level errors are visible.</span></div></>;
+      break;
     case "submitFeed":
       content = <>{text("feedType", "Feed type", "JSON_LISTINGS_FEED", true)}{text("contentType", "Content type", "Defaults to application/json; charset=UTF-8")}{textarea("content", "Feed content", "Paste the complete JSON or tab-delimited feed payload", true)}<Confirmation fields={fields} updateField={updateField} label="I understand this uploads data and starts a feed in Amazon." /></>;
       break;
@@ -457,6 +481,9 @@ function OperationFields({
     case "inboundShipment":
       content = <>{text("inboundPlanId", "Inbound plan ID", "wf12345678-...", true)}{text("shipmentId", "Shipment ID", "sh12345678-...", true)}</>;
       break;
+    case "inboundOperationStatus":
+      content = <>{text("operationId", "Operation ID", "1234abcd-1234-abcd-5678-1234abcd5678", true)}<div className="dataset-note"><Check size={15} /><span>Use the operationId returned by create/update inbound operations. SUCCESS confirms completion; inspect operationProblems for warnings or failures.</span></div></>;
+      break;
     case "prepDetails":
       content = textarea("mskus", "Merchant SKUs", "One MSKU per line", true);
       break;
@@ -468,7 +495,7 @@ function OperationFields({
       break;
     case "shipmentLabels": {
       const palletLabels = value("shipmentLabelType") === "PALLET";
-      content = <>{text("shipmentId", "Shipment ID", "FBA123456789", true)}<Choice label="Label type" required options={["UNIQUE", "BARCODE_2D", "PALLET"]} value={value("shipmentLabelType")} onChange={(next) => updateField("shipmentLabelType", next)} />{text("shipmentPageType", "Page type", "Defaults to PackageLabel_Thermal_NonPCP")}{text("numberOfPackages", "Number of packages")}{text("numberOfPallets", "Number of pallets", "", palletLabels, palletLabels ? "Required for PALLET labels" : undefined)}</>;
+      content = <>{text("shipmentId", "Shipment ID", "FBA123456789", true)}<Choice label="Label type" required options={["UNIQUE", "BARCODE_2D", "PALLET"]} value={value("shipmentLabelType")} onChange={(next) => updateField("shipmentLabelType", next)} />{text("shipmentPageType", "Page type", "Defaults to PackageLabel_Thermal_NonPCP")}{text("numberOfPackages", "Number of packages")}{text("numberOfPallets", "Number of pallets", "", palletLabels, palletLabels ? "Required for PALLET labels" : undefined)}{textarea("packageLabelsToPrint", "Package labels to print", "Optional · one CartonId / boxId per line")}{text("shipmentPageSize", "Page size", "Required for some non-partnered LTL label flows")}{text("pageStartIndex", "Page start index", "Required for some non-partnered LTL label flows")}</>;
       break;
     }
     case "billOfLading":
