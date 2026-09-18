@@ -18,6 +18,17 @@ const allOrderData = [
   "FULFILLMENT_ORDERS",
 ].join(",");
 
+const sandboxOrderData = [
+  "BUYER",
+  "RECIPIENT",
+  "PROCEEDS",
+  "EXPENSE",
+  "PROMOTION",
+  "CANCELLATION",
+  "FULFILLMENT",
+  "PACKAGES",
+].join(",");
+
 const documentPreviewLimit = 2 * 1024 * 1024;
 
 export async function POST(request: Request) {
@@ -42,6 +53,16 @@ export async function POST(request: Request) {
       }
 
       case "orders": {
+        if (input.environment === "sandbox") {
+          const params = new URLSearchParams({
+            createdAfter: "2024-12-25T00:00:00Z",
+            marketplaceIds: "A1VC38T7YXB528",
+            includedData: sandboxOrderData,
+          });
+          result = await call(input, "/orders/2026-01-01/orders?" + params);
+          break;
+        }
+
         const createdAfter = dateField(fields, "createdAfter");
         const createdBefore = optionalDate(fields, "createdBefore");
         validateCreatedOrderWindow(createdAfter, createdBefore);
@@ -61,8 +82,9 @@ export async function POST(request: Request) {
       }
 
       case "order": {
-        const orderId = stringField(fields, "orderId");
-        result = await call(input, "/orders/2026-01-01/orders/" + encodeURIComponent(orderId) + "?includedData=" + encodeURIComponent(allOrderData));
+        const orderId = input.environment === "sandbox" ? "171-9876543-2109876" : stringField(fields, "orderId");
+        const includedData = input.environment === "sandbox" ? sandboxOrderData : allOrderData;
+        result = await call(input, "/orders/2026-01-01/orders/" + encodeURIComponent(orderId) + "?includedData=" + encodeURIComponent(includedData));
         break;
       }
 
