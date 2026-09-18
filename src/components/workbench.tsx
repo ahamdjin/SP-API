@@ -112,7 +112,7 @@ const operationGroups: Array<{ label: string; items: OperationItem[] }> = [
       { id: "reports", label: "List reports", description: "Find recent report jobs", icon: FileBarChart, kind: "read" },
       { id: "createReport", label: "Request report", description: "Start a new Amazon report", icon: PackagePlus, kind: "write" },
       { id: "report", label: "Report status", description: "Check report processing", icon: FileSearch, kind: "read" },
-      { id: "reportDocument", label: "Report document", description: "Get the download URL", icon: Archive, kind: "read" },
+      { id: "reportDocument", label: "Report document", description: "Download and inspect the generated report", icon: Archive, kind: "read" },
     ],
   },
   {
@@ -176,6 +176,7 @@ export function Workbench() {
   const catalogItems = useMemo(() => extractCatalogItems(result?.data), [result]);
   const catalogFamily = useMemo(() => extractCatalogFamily(result), [result]);
   const feeSummary = useMemo(() => extractFeeSummary(result), [result]);
+  const nextStep = useMemo(() => result?.ok && isRecord(result.data) && typeof result.data.nextStep === "string" ? result.data.nextStep : "", [result]);
   const credentialsComplete = Object.values(credentials).every((value) => value.trim().length > 0);
   const activeItem = operationGroups.flatMap((group) => group.items).find((item) => item.id === operation)!;
   const ActiveIcon = activeItem.icon;
@@ -356,7 +357,7 @@ export function Workbench() {
               {catalogItems.length === 0 ? <p className="no-results">Amazon returned no catalogue items.</p> : <CatalogProductView key={catalogItems.map((item) => item.asin).join("|")} items={catalogItems} />}
             </div>}
             {result?.ok && operation === "fees" && feeSummary && <FeeResult summary={feeSummary} />}
-            {result?.ok && operation !== "catalog" && operation !== "fees" && <div className="success-summary"><Check size={18} /><div><strong>Amazon accepted the request</strong><p>The complete response is available below.</p></div></div>}
+            {result?.ok && operation !== "catalog" && operation !== "fees" && <div className="success-summary"><Check size={18} /><div><strong>Amazon returned a successful response</strong><p>{nextStep || "The complete response is available below."}</p></div></div>}
           </div>
         </section>
 
