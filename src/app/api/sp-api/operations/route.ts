@@ -443,7 +443,14 @@ async function submitFeed(input: Input, fields: Fields) {
     };
   }
 
-  const contentType = optionalString(fields, "contentType") || "text/tab-separated-values; charset=UTF-8";
+  const feedType = stringField(fields, "feedType");
+  const contentType = optionalString(fields, "contentType") || "application/json; charset=UTF-8";
+  const content = stringField(fields, "content");
+
+  if (feedType === "JSON_LISTINGS_FEED") {
+    validateJsonListingsFeed(contentType, content);
+  }
+
   const document = await call(input, "/feeds/2021-06-30/documents", "POST", { contentType });
   if (!document.ok) return document;
 
@@ -454,7 +461,6 @@ async function submitFeed(input: Input, fields: Fields) {
     throw new SpApiError("Amazon did not return a feed upload URL and document ID", 502, document.data, "FEED_UPLOAD_URL_MISSING");
   }
 
-  const content = stringField(fields, "content");
   if (Buffer.byteLength(content, "utf8") > 5 * 1024 * 1024) {
     throw new SpApiError("Feed content is limited to 5 MB in this workbench", 413, null, "FEED_TOO_LARGE");
   }
@@ -477,7 +483,7 @@ async function submitFeed(input: Input, fields: Fields) {
   }
 
   const created = await call(input, "/feeds/2021-06-30/feeds", "POST", {
-    feedType: stringField(fields, "feedType"),
+    feedType,
     marketplaceIds: [input.marketplaceId],
     inputFeedDocumentId: feedDocumentId,
   });
@@ -955,6 +961,64 @@ function parseItems(value: string, max = 2000) {
   if (items.length === 0) throw new SpApiError("Add at least one item", 400, null, "NO_ITEMS");
   if (items.length > max) throw new SpApiError("This operation accepts at most " + max + " items", 400, null, "TOO_MANY_ITEMS");
   return items;
+}
+
+
+function validateJsonListingsFeed(contentType: string, content: string) {
+  if (!/^application\/json\b/i.test(contentType.trim())) {
+    throw new SpApiError(
+      "JSON_LISTINGS_FEED requires an application/json content type",
+      400,
+      { contentType },
+      "INVALID_JSON_LISTINGS_CONTENT_TYPE",
+    );
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch (error) {
+    throw new SpApiError(
+      "Feed content is not valid JSON",
+      400,
+      { cause: error instanceof Error ? error.message : String(error) },
+      "INVALID_FEED_JSON",
+    );
+  }
+
+  const feed = record(parsed);
+  const header = record(feed.header);
+  const sellerId = typeof header.sellerId === "string" ? header.sellerId.trim() : "";
+  const version = typeof header.version === "string" ? header.version.trim() : "";
+  const messages = Array.isArray(feed.messages) ? feed.messages : [];
+
+  if (!sellerId || !version || messages.length === 0) {
+    throw new SpApiError(
+      "JSON_LISTINGS_FEED requires header.sellerId, header.version, and at least one message",
+      400,
+      {
+        hasSellerId: Boolean(sellerId),
+        hasVersion: Boolean(version),
+        messageCount: messages.length,
+      },
+      "INVALID_JSON_LISTINGS_STRUCTURE",
+    );
+  }
+
+  for (const [index, rawMessage] of messages.entries()) {
+    const message = record(rawMessage);
+    const messageId = message.messageId;
+    const sku = typeof message.sku === "string" ? message.sku.trim() : "";
+    const operationType = typeof message.operationType === "string" ? message.operationType.trim() : "";
+    if (!Number.isInteger(messageId) || Number(messageId) < 1 || !sku || !operationType) {
+      throw new SpApiError(
+        "Each JSON listings message requires a positive integer messageId, sku, and operationType",
+        400,
+        { messageIndex: index, messageId, sku, operationType },
+        "INVALID_JSON_LISTINGS_MESSAGE",
+      );
+    }
+  }
 }
 
 function record(value: unknown): Record<string, unknown> {
