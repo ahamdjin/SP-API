@@ -30,6 +30,7 @@ const allowedIncludedData = new Set([
   "vendorDetails",
 ]);
 
+// Catalog API entry point: validates search input and chooses exact-item, family, or paginated search behavior.
 export async function POST(request: Request) {
   try {
     const input = catalogRequestSchema.parse(await request.json());
@@ -124,6 +125,7 @@ type FamilyInput = {
   environment: Parameters<typeof callSpApi>[0]["environment"];
 };
 
+// Follows Amazon relationship data to collect the requested ASIN plus discoverable parent/child family items.
 async function getCompleteRelatedCatalog(input: FamilyInput) {
   const exact = await getCatalogItem(input, input.requestedAsin);
   if (!exact.ok) return exact;
@@ -204,6 +206,7 @@ async function getCompleteRelatedCatalog(input: FamilyInput) {
   };
 }
 
+// Actual single-ASIN Catalog Items request; the shared transport handles authentication/retries.
 function getCatalogItem(input: FamilyInput, asin: string) {
   const params = new URLSearchParams({ marketplaceIds: input.marketplaceId, includedData: input.includedData });
   if (input.environment === "production") params.set("locale", input.locale);
