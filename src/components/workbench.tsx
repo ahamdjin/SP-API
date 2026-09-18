@@ -197,7 +197,10 @@ export function Workbench() {
     setConnectionMessage("Requesting token…");
     try {
       const response = await postJson("/api/sp-api/test", { ...credentials, marketplaceId, environment });
-      if (!response.ok) throw new Error(response.error ?? "Connection failed");
+      if (!response.ok) {
+        const guidance = response.problem?.action ? " — " + response.problem.action : "";
+        throw new Error((response.problem?.code ? response.problem.code + ": " : "") + (response.problem?.message ?? response.error ?? "Connection failed") + guidance);
+      }
       setConnectionState("ready");
       setConnectionMessage("Connected · token valid " + Math.round((response.expiresIn ?? 3600) / 60) + " min");
     } catch (error) {
@@ -467,7 +470,7 @@ function OperationFields({
       content = text("feedId", "Feed ID", "123456789", true);
       break;
     case "feedDocument":
-      content = <>{text("feedDocumentId", "Result feed document ID", "Use resultFeedDocumentId returned after the feed is DONE", true)}<div className="dataset-note"><Check size={15} /><span>Downloads a safe 2 MB text preview of Amazon's processing report so record-level errors are visible.</span></div></>;
+      content = <>{text("feedDocumentId", "Result feed document ID", "Use resultFeedDocumentId returned after the feed is DONE", true)}<div className="dataset-note"><Check size={15} /><span>Downloads a safe 2 MB text preview of Amazon&apos;s processing report so record-level errors are visible.</span></div></>;
       break;
     case "submitFeed":
       content = <>{text("feedType", "Feed type", "JSON_LISTINGS_FEED", true)}{text("contentType", "Content type", "Defaults to application/json; charset=UTF-8")}{textarea("content", "Feed content", "Paste the complete JSON or tab-delimited feed payload", true)}<Confirmation fields={fields} updateField={updateField} label="I understand this uploads data and starts a feed in Amazon." /></>;
