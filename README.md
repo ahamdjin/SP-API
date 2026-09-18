@@ -98,6 +98,8 @@ The workbench starts in **Sandbox** mode. Switch to **Production** only when you
 - Production uses `https://sellingpartnerapi-*.amazon.com`.
 - The connection test now verifies both the LWA token exchange and a Sellers API `getMarketplaceParticipations` request.
 - Amazon's static sandbox returns mocked responses by matching the request parameters in the official OpenAPI model. A valid production-shaped request is not guaranteed to match a static sandbox example.
+- Static Sandbox fixture values are **guidance only**. They are displayed above the normal request fields and are never silently inserted or substituted.
+- Sandbox and Production use the same visible request fields and IDs. The only environment-specific transport behavior is where Amazon's static sandbox itself differs from Production (for example, mock document URLs and non-persistent feed upload content).
 - Production write operations still require an explicit confirmation.
 
 ## Error handling and retries
@@ -127,9 +129,23 @@ The workbench renders the useful Amazon response fields directly in the Result p
 - **Inventory and prep:** returned records render as tables.
 - **Documents:** report/feed documents get a bounded text preview when possible and always preserve Amazon's original presigned URL. Item labels, shipment labels, and bills of lading expose Amazon's returned download URL.
 
-Amazon's **static** sandbox examples are independent fixtures, so an ID returned by one static example does not always feed into the next example. In Sandbox mode the workbench substitutes the exact fixture required by the selected follow-up operation and explains that behavior in the Result panel. Production does not do this: it passes Amazon's real returned report IDs, feed IDs, document IDs, inbound plan IDs, operation IDs, and shipment IDs into the next operation.
+Amazon's **static** sandbox examples are independent fixtures, so an ID returned by one static example does not always feed into the next example. The workbench no longer substitutes those fixtures automatically. Sandbox and Production show the same request fields; when Sandbox is selected, a yellow **Sandbox example** panel shows Amazon's documented fixture values and the user enters them explicitly. What is visible in the form is what the request builder sends.
 
 FBA Inventory is different: Amazon currently marks `GET /fba/inventory/v1/summaries` as a **dynamic sandbox** operation. Its results depend on inventory state created in the sandbox, so an empty inventory response is valid and is not replaced with fabricated static data.
+## Manual Sandbox testing
+
+When **Sandbox** is selected, each static operation shows an Amazon fixture example above the normal form. Enter the example values yourself if you want a matching mocked response. You can also enter different values to deliberately test Amazon's sandbox validation/error behavior.
+
+Examples include:
+
+- Catalog: US marketplace + ASIN `B07N4M94X4`, or keywords `samsung,tv`, with the fixture's exact `includedData` list.
+- Fees: US marketplace + ASIN `B00V5DG6IQ`, price/shipping `10`, Merchant fulfillment, request identifier `UmaS1`, zero points.
+- Orders: Japan marketplace + the documented created-after/order-ID examples and exact included-data override.
+- Reports/Feeds: the documented report/feed filters, IDs, document IDs, content type, and marketplace lists.
+- Fulfillment Inbound: the documented plan, shipment, operation, MSKU, address, label, and document values.
+
+FBA Inventory remains a **dynamic Sandbox** operation, so its data depends on the sandbox inventory state rather than a single canned fixture.
+
 ## Response matrix
 
 Every workbench operation now has a visible request/response contract in the UI, a structured Result view, a complete returned-data block, and the raw transport envelope in the Response inspector.
