@@ -119,7 +119,9 @@ export async function POST(request: Request) {
           const processingStatuses = csvValues(optionalString(fields, "processingStatuses"), 5);
           validateEnumValues("processingStatuses", processingStatuses, processingStatusValues);
           if (processingStatuses.length) params.set("processingStatuses", processingStatuses.join(","));
-          addCsv(params, "marketplaceIds", optionalString(fields, "reportMarketplaceIds"), 10);
+          const reportMarketplaceIds = csvValues(optionalString(fields, "reportMarketplaceIds"), 10);
+          validateMarketplaceRegions(input, reportMarketplaceIds, "reportMarketplaceIds");
+          if (reportMarketplaceIds.length) params.set("marketplaceIds", reportMarketplaceIds.join(","));
           addOptional(params, "pageSize", optionalIntegerField(fields, "pageSize", 1, 100));
           const createdSince = optionalDate(fields, "createdSince");
           const createdUntil = optionalDate(fields, "createdUntil");
@@ -136,9 +138,11 @@ export async function POST(request: Request) {
         const range = optionalDateRange(fields);
         validateOptionalRange(range.dataStartTime, range.dataEndTime, "dataStartTime", "dataEndTime");
         const marketplaceIds = csvValues(optionalString(fields, "reportMarketplaceIds"), 10);
+        const requestedMarketplaces = marketplaceIds.length ? marketplaceIds : [input.marketplaceId];
+        validateMarketplaceRegions(input, requestedMarketplaces, "reportMarketplaceIds");
         result = await call(input, "/reports/2021-06-30/reports", "POST", {
           reportType: stringField(fields, "reportType"),
-          marketplaceIds: marketplaceIds.length ? marketplaceIds : [input.marketplaceId],
+          marketplaceIds: requestedMarketplaces,
           ...range,
         });
         break;
@@ -170,7 +174,9 @@ export async function POST(request: Request) {
           const processingStatuses = csvValues(optionalString(fields, "processingStatuses"), 5);
           validateEnumValues("processingStatuses", processingStatuses, processingStatusValues);
           if (processingStatuses.length) params.set("processingStatuses", processingStatuses.join(","));
-          addCsv(params, "marketplaceIds", optionalString(fields, "feedMarketplaceIds"), 10);
+          const feedMarketplaceIds = csvValues(optionalString(fields, "feedMarketplaceIds"), 10);
+          validateMarketplaceRegions(input, feedMarketplaceIds, "feedMarketplaceIds");
+          if (feedMarketplaceIds.length) params.set("marketplaceIds", feedMarketplaceIds.join(","));
           addOptional(params, "pageSize", optionalIntegerField(fields, "pageSize", 1, 100));
           const createdSince = optionalDate(fields, "createdSince");
           const createdUntil = optionalDate(fields, "createdUntil");
@@ -251,6 +257,7 @@ export async function POST(request: Request) {
         }
 
         const requestedDestinations = destinationMarketplaces.length ? destinationMarketplaces : [input.marketplaceId];
+        validateMarketplaceRegions(input, requestedDestinations, "destinationMarketplaces");
         const items = parseItems(stringField(fields, "items"), 2000, 500000);
         validateInboundItems(items, requestedDestinations[0]);
 
@@ -358,6 +365,8 @@ async function submitFeed(input: Input, fields: Fields) {
   const contentType = optionalString(fields, "contentType") || "application/json; charset=UTF-8";
   const content = stringField(fields, "content");
   const marketplaceIds = csvValues(optionalString(fields, "feedMarketplaceIds"), 10);
+  const requestedMarketplaces = marketplaceIds.length ? marketplaceIds : [input.marketplaceId];
+  validateMarketplaceRegions(input, requestedMarketplaces, "feedMarketplaceIds");
 
   if (feedType === "JSON_LISTINGS_FEED") {
     validateJsonListingsFeed(contentType, content);
@@ -398,7 +407,7 @@ async function submitFeed(input: Input, fields: Fields) {
 
   const created = await call(input, "/feeds/2021-06-30/feeds", "POST", {
     feedType,
-    marketplaceIds: marketplaceIds.length ? marketplaceIds : [input.marketplaceId],
+    marketplaceIds: requestedMarketplaces,
     inputFeedDocumentId: feedDocumentId,
   });
 
@@ -549,6 +558,32 @@ function safeAmazonDocumentUrl(value: string, label: string) {
     );
   }
   return url;
+}
+
+function validateMarketplaceRegions(input: Input, marketplaceIds: string[], key: string) {
+  if (input.environment !== "production" || marketplaceIds.length === 0) return;
+  const selected = getMarketplace(input.marketplaceId);
+  if (!selected) return;
+
+  const unknown = marketplaceIds.filter((id) => !getMarketplace(id));
+  if (unknown.length) {
+    throw new SpApiError(
+      key + " contains unsupported marketplace IDs",
+      400,
+      { unknown },
+      "UNSUPPORTED_MARKETPLACE",
+    );
+  }
+
+  const wrongRegion = marketplaceIds.filter((id) => getMarketplace(id)?.region !== selected.region);
+  if (wrongRegion.length) {
+    throw new SpApiError(
+      key + " must use marketplaces in the same SP-API selling region as the selected marketplace",
+      400,
+      { selectedMarketplace: input.marketplaceId, selectedRegion: selected.region, wrongRegion },
+      "MARKETPLACE_REGION_MISMATCH",
+    );
+  }
 }
 
 function validateInventoryStartDate(startDateTime: string) {
