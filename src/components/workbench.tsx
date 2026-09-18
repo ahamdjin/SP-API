@@ -342,8 +342,18 @@ export function Workbench() {
     classificationIds: "",
     pageSize: "20",
     pageToken: "",
+    includedData: "attributes,classifications,dimensions,identifiers,images,productTypes,relationships,salesRanks,summaries,vendorDetails",
   });
-  const [fees, setFees] = useState({ idType: "ASIN" as "ASIN" | "SKU", identifier: "", price: "", shipping: "0", isAmazonFulfilled: true });
+  const [fees, setFees] = useState({
+    idType: "ASIN" as "ASIN" | "SKU",
+    identifier: "",
+    price: "",
+    shipping: "0",
+    isAmazonFulfilled: true,
+    requestIdentifier: "",
+    pointsNumber: "",
+    pointsAmount: "",
+  });
 
   const marketplace = useMemo(() => getMarketplace(marketplaceId) ?? marketplaces[0], [marketplaceId]);
   const catalogItems = useMemo(() => extractCatalogItems(result?.data), [result]);
@@ -410,40 +420,21 @@ export function Workbench() {
     let payload: unknown = { ...credentials, marketplaceId, environment, operation, fields };
     if (operation === "catalog") {
       url = "/api/sp-api/catalog";
-      payload = environment === "sandbox"
-        ? {
-            ...credentials,
-            marketplaceId,
-            environment,
-            ...catalog,
-            identifierType: "ASIN",
-            query: catalog.mode === "keywords" ? "samsung,tv" : "B07N4M94X4",
-          }
-        : { ...credentials, marketplaceId, environment, ...catalog };
+      payload = { ...credentials, marketplaceId, environment, ...catalog };
     }
     if (operation === "fees") {
       url = "/api/sp-api/fees";
-      payload = environment === "sandbox"
-        ? {
-            ...credentials,
-            marketplaceId,
-            environment,
-            idType: "ASIN",
-            identifier: "B00V5DG6IQ",
-            currency: "USD",
-            price: 10,
-            shipping: 10,
-            isAmazonFulfilled: false,
-          }
-        : {
-            ...credentials,
-            marketplaceId,
-            environment,
-            ...fees,
-            currency: marketplace.currency,
-            price: Number(fees.price),
-            shipping: Number(fees.shipping),
-          };
+      payload = {
+        ...credentials,
+        marketplaceId,
+        environment,
+        ...fees,
+        currency: marketplace.currency,
+        price: Number(fees.price),
+        shipping: Number(fees.shipping),
+        pointsNumber: fees.pointsNumber === "" ? undefined : Number(fees.pointsNumber),
+        pointsAmount: fees.pointsAmount === "" ? undefined : Number(fees.pointsAmount),
+      };
     }
 
     setIsLoading(true);
@@ -656,8 +647,18 @@ type CatalogState = {
   classificationIds: string;
   pageSize: string;
   pageToken: string;
+  includedData: string;
 };
-type FeesState = { idType: "ASIN" | "SKU"; identifier: string; price: string; shipping: string; isAmazonFulfilled: boolean };
+type FeesState = {
+  idType: "ASIN" | "SKU";
+  identifier: string;
+  price: string;
+  shipping: string;
+  isAmazonFulfilled: boolean;
+  requestIdentifier: string;
+  pointsNumber: string;
+  pointsAmount: string;
+};
 
 function OperationFields({
   environment, operation, fields, updateField, catalog, setCatalog, fees, setFees, currency,
