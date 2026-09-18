@@ -72,11 +72,11 @@ Requirements:
 Use it like this:
 
 1. Double-click `SP-API.sln`.
-2. Let Visual Studio restore npm dependencies if this is the first open.
-3. Use the single visible launch target **SP-API Local** and press **Run / F5**.
-4. Visual Studio starts the Next.js development server and opens Microsoft Edge at `http://localhost:3000`.
+2. Press the green **Run / F5** button.
+3. On the first run (or after `package-lock.json` changes), the startup launcher automatically runs `npm ci`.
+4. Once dependencies are ready, Visual Studio starts the Next.js development server and opens the configured browser at `http://localhost:3000`.
 
-The helper server/browser launch profiles are hidden so the Start dropdown stays simple. Production verification is still done with `npm run build` and `npm start`.
+No manual `npm install` is required for the Visual Studio workflow. Later runs skip dependency installation while the lockfile is unchanged. Production verification is still done with `npm run build` and `npm start`.
 
 ## Run locally
 
