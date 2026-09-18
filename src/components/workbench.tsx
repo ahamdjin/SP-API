@@ -72,18 +72,19 @@ type OperationItem = {
 const initialCredentials: Credentials = { clientId: "", clientSecret: "", refreshToken: "" };
 const defaultFields: Record<string, FieldValue> = {
   details: true,
+  includeOrderPii: false,
   pageSize: "20",
-  createdAfter: toLocalDateTime(new Date(Date.now() - 20 * 24 * 60 * 60 * 1000)),
+  createdAfter: toLocalDateTime(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
   createdBefore: "",
-  statuses: "UNSHIPPED,SHIPPED",
-  fulfilledBy: "AMAZON",
-  reportTypes: "GET_FLAT_FILE_OPEN_LISTINGS_DATA",
-  reportType: "GET_FLAT_FILE_OPEN_LISTINGS_DATA",
-  processingStatuses: "DONE,IN_PROGRESS,IN_QUEUE",
-  feedTypes: "JSON_LISTINGS_FEED",
+  statuses: "",
+  fulfilledBy: "",
+  reportTypes: "",
+  reportType: "GET_MERCHANT_LISTINGS_ALL_DATA",
+  processingStatuses: "",
+  feedTypes: "",
   feedType: "JSON_LISTINGS_FEED",
   contentType: "application/json; charset=UTF-8",
-  status: "ACTIVE",
+  status: "",
   sortBy: "LAST_UPDATED_TIME",
   sortOrder: "DESC",
   countryCode: "US",
@@ -183,19 +184,22 @@ const responseContracts: Record<Operation, ResponseContract> = {
     returns: ["payload.granularity", "payload.inventorySummaries[]", "inventoryDetails quantities", "pagination.nextToken"],
     next: "Use pagination.nextToken to continue. Dynamic Sandbox inventory can legitimately be empty.",
     pagination: "pagination.nextToken",
+    note: "Amazon inventory next tokens expire quickly (currently 30 seconds), so request the next page promptly.",
   },
   orders: {
     request: "GET /orders/2026-01-01/orders",
     delivery: "Immediate JSON response",
-    returns: ["orders[]", "orderItems", "buyer / recipient", "proceeds / payment / tax", "fulfillment / packages", "pagination.nextToken"],
+    returns: ["orders[]", "orderItems", "proceeds / payment / tax", "fulfillment / packages", "optional buyer / recipient", "pagination.nextToken"],
     next: "Open an order by orderId or continue with pagination.nextToken.",
+    note: "Buyer and recipient PII are opt-in in Production so normal order reads still work without PII roles.",
     pagination: "pagination.nextToken",
   },
   order: {
     request: "GET /orders/2026-01-01/orders/{orderId}",
     delivery: "Immediate JSON response",
-    returns: ["order", "orderItems", "buyer / recipient", "proceeds / payment / tax", "fulfillment / packages / fulfillmentOrders"],
+    returns: ["order", "orderItems", "proceeds / payment / tax", "fulfillment / packages / fulfillmentOrders", "optional buyer / recipient"],
     next: "The Result tab shows the order summary/items; All returned data shows every included data group Amazon returned.",
+    note: "Enable buyer/recipient only when your Production app has the corresponding Orders PII roles.",
   },
   reports: {
     request: "GET /reports/2021-06-30/reports",
@@ -708,22 +712,22 @@ function OperationFields({
     case "orders":
       content = environment === "sandbox"
         ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s Orders 2026 Japan fixture created after <strong>2024-12-25T00:00:00Z</strong>.</span></div>
-        : <>{date("createdAfter", "Created after", true)}{date("createdBefore", "Created before")}{text("statuses", "Order statuses", "UNSHIPPED,SHIPPED")}{text("fulfilledBy", "Fulfilled by", "AMAZON or MERCHANT")}{text("pageSize", "Results per page", "50")}{text("orderPaginationToken", "Next-page token", "Optional · from the previous response")}<div className="dataset-note"><Check size={15} /><span>Requests all Orders 2026 data groups, including buyer, recipient, payment, tax, packages, fulfilment, promotions, proceeds, expenses, cancellations, and order items.</span></div></>;
+        : <>{date("createdAfter", "Created after", true)}{date("createdBefore", "Created before")}{text("statuses", "Order statuses", "UNSHIPPED,SHIPPED")}{text("fulfilledBy", "Fulfilled by", "AMAZON or MERCHANT")}{text("pageSize", "Results per page", "50")}{text("orderPaginationToken", "Next-page token", "Optional · from the previous response")}<CheckField label="Include buyer + recipient PII (requires the appropriate Orders roles)" checked={Boolean(fields.includeOrderPii)} onChange={(checked) => updateField("includeOrderPii", checked)} /><div className="dataset-note"><Check size={15} /><span>Core order data includes payment, tax, packages, fulfilment, promotions, proceeds, expenses, cancellations, fulfilment orders, and order items. Buyer/recipient data is opt-in to avoid role-related Production failures.</span></div></>;
       break;
     case "order":
       content = environment === "sandbox"
         ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically opens Amazon&apos;s Orders 2026 example <strong>171-9876543-2109876</strong>.</span></div>
-        : text("orderId", "Amazon order ID", "114-1234567-1234567", true);
+        : <>{text("orderId", "Amazon order ID", "114-1234567-1234567", true)}<CheckField label="Include buyer + recipient PII (requires the appropriate Orders roles)" checked={Boolean(fields.includeOrderPii)} onChange={(checked) => updateField("includeOrderPii", checked)} /></>;
       break;
     case "reports":
       content = environment === "sandbox"
         ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox uses Amazon&apos;s fixed list-reports fixture: FEE_DISCOUNTS_REPORT + GET_AFN_INVENTORY_DATA with IN_QUEUE + IN_PROGRESS. The workbench sends those exact parameters automatically.</span></div>
-        : <>{text("reportTypes", "Report type(s)", "GET_FLAT_FILE_OPEN_LISTINGS_DATA", true)}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("reportNextToken", "Next-page token", "Optional · from the previous response")}</>;
+        : <>{text("reportTypes", "Report type(s)", "Optional · e.g. GET_MERCHANT_LISTINGS_ALL_DATA")}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("reportNextToken", "Next-page token", "Optional · from the previous response")}</>;
       break;
     case "createReport":
       content = environment === "sandbox"
         ? <><div className="dataset-note"><Check size={15} /><span>Static Sandbox uses Amazon&apos;s official create-report fixture automatically: GET_MERCHANT_LISTINGS_ALL_DATA, start 2024-03-10T20:11:24.000Z, marketplaces Germany + US. A successful response returns report ID ID323.</span></div><Confirmation fields={fields} updateField={updateField} label="I understand this sends Amazon&apos;s fixed Sandbox report request." /></>
-        : <>{text("reportType", "Report type", "GET_FLAT_FILE_OPEN_LISTINGS_DATA", true)}{date("dataStartTime", "Data start")}{date("dataEndTime", "Data end")}<Confirmation fields={fields} updateField={updateField} label="I understand this starts a report job in Amazon." /></>;
+        : <>{text("reportType", "Report type", "GET_MERCHANT_LISTINGS_ALL_DATA", true)}{date("dataStartTime", "Data start")}{date("dataEndTime", "Data end")}<Confirmation fields={fields} updateField={updateField} label="I understand this starts a report job in Amazon." /></>;
       break;
     case "report":
       content = environment === "sandbox"
@@ -738,7 +742,7 @@ function OperationFields({
     case "feeds":
       content = environment === "sandbox"
         ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s POST_PRODUCT_DATA / CANCELLED,DONE list fixture.</span></div>
-        : <>{text("feedTypes", "Feed type(s)", "JSON_LISTINGS_FEED", true)}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("feedNextToken", "Next-page token", "Optional · from the previous response")}</>;
+        : <>{text("feedTypes", "Feed type(s)", "Optional · e.g. JSON_LISTINGS_FEED")}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("feedNextToken", "Next-page token", "Optional · from the previous response")}</>;
       break;
     case "feed":
       content = environment === "sandbox"
@@ -753,7 +757,7 @@ function OperationFields({
     case "submitFeed":
       content = environment === "sandbox"
         ? <><div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s official POST_PRODUCT_DATA feed fixture. No real file is uploaded and no production listing is changed.</span></div><Confirmation fields={fields} updateField={updateField} label="I understand this runs Amazon's fixed Sandbox feed example." /></>
-        : <>{text("feedType", "Feed type", "JSON_LISTINGS_FEED", true)}{text("contentType", "Content type", "Defaults to application/json; charset=UTF-8")}{textarea("content", "Feed content", "Paste the complete JSON or tab-delimited feed payload", true)}<Confirmation fields={fields} updateField={updateField} label="I understand this uploads data and starts a feed in Amazon." /></>;
+        : <>{text("feedType", "Feed type", "JSON_LISTINGS_FEED", true)}{text("contentType", "Content type", "Defaults to application/json; charset=UTF-8")}{textarea("content", "Feed content", "Paste the complete JSON listings feed payload", true)}<div className="dataset-note"><Check size={15} /><span>For JSON_LISTINGS_FEED the workbench validates JSON syntax plus header.sellerId, header.version, messages, messageId, SKU and operationType before uploading anything to Amazon.</span></div><Confirmation fields={fields} updateField={updateField} label="I understand this uploads data and starts a feed in Amazon." /></>;
       break;
     case "inboundPlans":
       content = <><Choice label="Plan status" options={["ACTIVE", "SHIPPED", "VOIDED"]} value={value("status")} onChange={(next) => updateField("status", next)} /><Choice label="Sort by" options={["LAST_UPDATED_TIME", "CREATION_TIME"]} value={value("sortBy")} onChange={(next) => updateField("sortBy", next)} /><Choice label="Sort order" options={["DESC", "ASC"]} value={value("sortOrder")} onChange={(next) => updateField("sortOrder", next)} />{text("pageSize", "Results per page", "10")}{text("inboundPaginationToken", "Next-page token", "Optional · from the previous response")}</>;
