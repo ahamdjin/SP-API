@@ -18,6 +18,17 @@ const allOrderData = [
   "FULFILLMENT_ORDERS",
 ].join(",");
 
+const sandboxOrderData = [
+  "BUYER",
+  "RECIPIENT",
+  "PROCEEDS",
+  "EXPENSE",
+  "PROMOTION",
+  "CANCELLATION",
+  "FULFILLMENT",
+  "PACKAGES",
+].join(",");
+
 const documentPreviewLimit = 2 * 1024 * 1024;
 
 export async function POST(request: Request) {
@@ -42,6 +53,16 @@ export async function POST(request: Request) {
       }
 
       case "orders": {
+        if (input.environment === "sandbox") {
+          const params = new URLSearchParams({
+            createdAfter: "2024-12-25T00:00:00Z",
+            marketplaceIds: "A1VC38T7YXB528",
+            includedData: sandboxOrderData,
+          });
+          result = await call(input, "/orders/2026-01-01/orders?" + params);
+          break;
+        }
+
         const createdAfter = dateField(fields, "createdAfter");
         const createdBefore = optionalDate(fields, "createdBefore");
         validateCreatedOrderWindow(createdAfter, createdBefore);
@@ -61,8 +82,9 @@ export async function POST(request: Request) {
       }
 
       case "order": {
-        const orderId = stringField(fields, "orderId");
-        result = await call(input, "/orders/2026-01-01/orders/" + encodeURIComponent(orderId) + "?includedData=" + encodeURIComponent(allOrderData));
+        const orderId = input.environment === "sandbox" ? "171-9876543-2109876" : stringField(fields, "orderId");
+        const includedData = input.environment === "sandbox" ? sandboxOrderData : allOrderData;
+        result = await call(input, "/orders/2026-01-01/orders/" + encodeURIComponent(orderId) + "?includedData=" + encodeURIComponent(includedData));
         break;
       }
 
@@ -116,12 +138,16 @@ export async function POST(request: Request) {
         break;
       }
 
-      case "report":
-        result = await call(input, "/reports/2021-06-30/reports/" + encodeURIComponent(stringField(fields, "reportId")));
+      case "report": {
+        const reportId = input.environment === "sandbox" ? "ID323" : stringField(fields, "reportId");
+        result = await call(input, "/reports/2021-06-30/reports/" + encodeURIComponent(reportId));
         break;
+      }
 
       case "reportDocument": {
-        const reportDocumentId = stringField(fields, "reportDocumentId");
+        const reportDocumentId = input.environment === "sandbox"
+          ? "0356cf79-b8b0-4226-b4b9-0ee058ea5760"
+          : stringField(fields, "reportDocumentId");
         const suffix = input.environment === "sandbox" ? "" : "?enableContentEncodingUrlHeader=true";
         result = await getAndDownloadDocument(
           input,
@@ -132,6 +158,16 @@ export async function POST(request: Request) {
       }
 
       case "feeds": {
+        if (input.environment === "sandbox") {
+          const params = new URLSearchParams({
+            feedTypes: "POST_PRODUCT_DATA",
+            processingStatuses: "CANCELLED,DONE",
+            pageSize: "10",
+          });
+          result = await call(input, "/feeds/2021-06-30/feeds?" + params);
+          break;
+        }
+
         const nextToken = optionalString(fields, "feedNextToken");
         const params = nextToken
           ? new URLSearchParams({ nextToken })
@@ -150,17 +186,24 @@ export async function POST(request: Request) {
         break;
       }
 
-      case "feed":
-        result = await call(input, "/feeds/2021-06-30/feeds/" + encodeURIComponent(stringField(fields, "feedId")));
+      case "feed": {
+        const feedId = input.environment === "sandbox" ? "feedId1" : stringField(fields, "feedId");
+        result = await call(input, "/feeds/2021-06-30/feeds/" + encodeURIComponent(feedId));
         break;
+      }
 
-      case "feedDocument":
+      case "feedDocument": {
+        const feedDocumentId = input.environment === "sandbox"
+          ? "0356cf79-b8b0-4226-b4b9-0ee058ea5760"
+          : stringField(fields, "feedDocumentId");
+        const suffix = input.environment === "sandbox" ? "" : "?enableContentEncodingUrlHeader=true";
         result = await getAndDownloadDocument(
           input,
-          "/feeds/2021-06-30/documents/" + encodeURIComponent(stringField(fields, "feedDocumentId")) + "?enableContentEncodingUrlHeader=true",
+          "/feeds/2021-06-30/documents/" + encodeURIComponent(feedDocumentId) + suffix,
           "feed processing report",
         );
         break;
+      }
 
       case "submitFeed":
         requireConfirmation(fields);
@@ -168,38 +211,99 @@ export async function POST(request: Request) {
         break;
 
       case "inboundPlans": {
-        const params = new URLSearchParams({
-          pageSize: String(numberField(fields, "pageSize", 1, 30, 10)),
-          sortBy: optionalString(fields, "sortBy") || "LAST_UPDATED_TIME",
-          sortOrder: optionalString(fields, "sortOrder") || "DESC",
-        });
-        addOptional(params, "status", optionalString(fields, "status"));
-        addOptional(params, "paginationToken", optionalString(fields, "inboundPaginationToken"));
+        const params = input.environment === "sandbox"
+          ? new URLSearchParams({
+              status: "ACTIVE",
+              sortBy: "LAST_UPDATED_TIME",
+              sortOrder: "ASC",
+              pageSize: "2",
+              paginationToken: "paginationToken",
+            })
+          : new URLSearchParams({
+              pageSize: String(numberField(fields, "pageSize", 1, 30, 10)),
+              sortBy: optionalString(fields, "sortBy") || "LAST_UPDATED_TIME",
+              sortOrder: optionalString(fields, "sortOrder") || "DESC",
+            });
+        if (input.environment !== "sandbox") {
+          addOptional(params, "status", optionalString(fields, "status"));
+          addOptional(params, "paginationToken", optionalString(fields, "inboundPaginationToken"));
+        }
         result = await call(input, "/inbound/fba/2024-03-20/inboundPlans?" + params);
         break;
       }
 
-      case "inboundPlan":
-        result = await call(input, "/inbound/fba/2024-03-20/inboundPlans/" + encodeURIComponent(stringField(fields, "inboundPlanId")));
+      case "inboundPlan": {
+        const inboundPlanId = input.environment === "sandbox"
+          ? "wf1234abcd-1234-abcd-5678-1234abcd5678"
+          : stringField(fields, "inboundPlanId");
+        result = await call(input, "/inbound/fba/2024-03-20/inboundPlans/" + encodeURIComponent(inboundPlanId));
         break;
+      }
 
-      case "inboundShipment":
-        result = await call(input, "/inbound/fba/2024-03-20/inboundPlans/" + encodeURIComponent(stringField(fields, "inboundPlanId")) + "/shipments/" + encodeURIComponent(stringField(fields, "shipmentId")));
+      case "inboundShipment": {
+        const inboundPlanId = input.environment === "sandbox"
+          ? "wf1234abcd-1234-abcd-5678-1234abcd5678"
+          : stringField(fields, "inboundPlanId");
+        const shipmentId = input.environment === "sandbox"
+          ? "sh1234abcd-1234-abcd-5678-1234abcd5678"
+          : stringField(fields, "shipmentId");
+        result = await call(input, "/inbound/fba/2024-03-20/inboundPlans/" + encodeURIComponent(inboundPlanId) + "/shipments/" + encodeURIComponent(shipmentId));
         break;
+      }
 
-      case "inboundOperationStatus":
-        result = await call(input, "/inbound/fba/2024-03-20/operations/" + encodeURIComponent(stringField(fields, "operationId")));
+      case "inboundOperationStatus": {
+        const operationId = input.environment === "sandbox"
+          ? "1234abcd-1234-abcd-5678-1234abcd5678"
+          : stringField(fields, "operationId");
+        result = await call(input, "/inbound/fba/2024-03-20/operations/" + encodeURIComponent(operationId));
         break;
+      }
 
       case "prepDetails": {
-        const params = new URLSearchParams({ marketplaceId: input.marketplaceId });
-        addPrepMskus(params, stringField(fields, "mskus"), 100);
+        const params = new URLSearchParams({
+          marketplaceId: input.environment === "sandbox" ? "ATVPDKIKX0DER" : input.marketplaceId,
+        });
+        if (input.environment === "sandbox") {
+          params.append("mskus", "msku1");
+          params.append("mskus", "msku2");
+        } else {
+          addPrepMskus(params, stringField(fields, "mskus"), 100);
+        }
         result = await call(input, "/inbound/fba/2024-03-20/items/prepDetails?" + params);
         break;
       }
 
       case "createInboundPlan": {
         requireConfirmation(fields);
+
+        if (input.environment === "sandbox") {
+          result = await call(input, "/inbound/fba/2024-03-20/inboundPlans", "POST", {
+            name: "FBA (03/20/2024, 12:01 PM)",
+            sourceAddress: {
+              name: "name",
+              companyName: "Acme",
+              addressLine1: "123 example street",
+              addressLine2: "Unit 102",
+              city: "Toronto",
+              countryCode: "CA",
+              stateOrProvinceCode: "ON",
+              postalCode: "M1M1M1",
+              phoneNumber: "1234567890",
+              email: "email@email.com",
+            },
+            destinationMarketplaces: ["A2EUQ1WTGCTBG2"],
+            items: [{
+              msku: "msku",
+              prepOwner: "AMAZON",
+              labelOwner: "AMAZON",
+              quantity: 2,
+              expiration: "2024-01-01",
+              manufacturingLotCode: "lotCode",
+            }],
+          });
+          break;
+        }
+
         const marketplace = getMarketplace(input.marketplaceId);
         result = await call(input, "/inbound/fba/2024-03-20/inboundPlans", "POST", {
           destinationMarketplaces: [input.marketplaceId],
@@ -221,6 +325,20 @@ export async function POST(request: Request) {
       }
 
       case "itemLabels": {
+        if (input.environment === "sandbox") {
+          result = await call(input, "/inbound/fba/2024-03-20/items/labels", "POST", {
+            marketplaceId: "ATVPDKIKX0DER",
+            mskuQuantities: [
+              { msku: "msku1", quantity: 1 },
+              { msku: "msku2", quantity: 1 },
+            ],
+            labelType: "STANDARD_FORMAT",
+            pageType: "A4_21",
+            localeCode: "en_US",
+          });
+          break;
+        }
+
         const marketplace = getMarketplace(input.marketplaceId);
         result = await call(input, "/inbound/fba/2024-03-20/items/labels", "POST", {
           marketplaceId: input.marketplaceId,
@@ -233,6 +351,15 @@ export async function POST(request: Request) {
       }
 
       case "shipmentLabels": {
+        if (input.environment === "sandbox") {
+          const params = new URLSearchParams({
+            PageType: "PackageLabel_Letter_2",
+            LabelType: "BARCODE_2D",
+          });
+          result = await call(input, "/fba/inbound/v0/shipments/348975493/labels?" + params);
+          break;
+        }
+
         const shipmentId = stringField(fields, "shipmentId");
         const labelType = optionalString(fields, "shipmentLabelType") || "UNIQUE";
         const numberOfPallets = optionalIntegerField(fields, "numberOfPallets", 1);
@@ -249,17 +376,18 @@ export async function POST(request: Request) {
         addOptional(params, "PageSize", optionalIntegerField(fields, "shipmentPageSize", 1));
         addOptional(params, "PageStartIndex", optionalIntegerField(fields, "pageStartIndex", 0));
         addRepeatedCsv(params, "PackageLabelsToPrint", optionalString(fields, "packageLabelsToPrint"), 1000);
-
         result = await call(input, "/fba/inbound/v0/shipments/" + encodeURIComponent(shipmentId) + "/labels?" + params);
         break;
       }
 
-      case "billOfLading":
-        result = await call(input, "/fba/inbound/v0/shipments/" + encodeURIComponent(stringField(fields, "shipmentId")) + "/billOfLading");
+      case "billOfLading": {
+        const shipmentId = input.environment === "sandbox" ? "shipmentId" : stringField(fields, "shipmentId");
+        result = await call(input, "/fba/inbound/v0/shipments/" + encodeURIComponent(shipmentId) + "/billOfLading");
         break;
+      }
     }
 
-    result = applyBusinessOutcome(input.operation, result);
+    result = applyBusinessOutcome(input, result);
     return Response.json(result, { status: result.ok ? 200 : result.status, headers: privateHeaders });
   } catch (error) {
     return toErrorResponse(error);
@@ -282,6 +410,35 @@ function call(input: Input, path: string, method: "GET" | "POST" = "GET", body?:
 }
 
 async function submitFeed(input: Input, fields: Fields) {
+  if (input.environment === "sandbox") {
+    const document = await call(input, "/feeds/2021-06-30/documents", "POST", {
+      contentType: "text/tab-separated-values; charset=UTF-8",
+    });
+    if (!document.ok) return document;
+
+    const documentData = record(document.data);
+    const feedDocumentId = typeof documentData.feedDocumentId === "string"
+      ? documentData.feedDocumentId
+      : "3d4e42b5-1d6e-44e8-a89c-2abfca0625bb";
+
+    const created = await call(input, "/feeds/2021-06-30/feeds", "POST", {
+      feedType: "POST_PRODUCT_DATA",
+      marketplaceIds: ["ATVPDKIKX0DER", "A1F83G8C2ARO7P"],
+      inputFeedDocumentId: feedDocumentId,
+    });
+
+    if (!created.ok) return created;
+    return {
+      ...created,
+      data: {
+        ...record(created.data),
+        inputFeedDocumentId: feedDocumentId,
+        sandboxFixture: true,
+        nextStep: "Amazon static Sandbox returns feedId 3485934 for createFeed, but getFeed uses a separate feedId1 fixture. Use the workbench's Check feed status action; it switches to the correct status fixture automatically.",
+      },
+    };
+  }
+
   const contentType = optionalString(fields, "contentType") || "text/tab-separated-values; charset=UTF-8";
   const document = await call(input, "/feeds/2021-06-30/documents", "POST", { contentType });
   if (!document.ok) return document;
@@ -298,26 +455,21 @@ async function submitFeed(input: Input, fields: Fields) {
     throw new SpApiError("Feed content is limited to 5 MB in this workbench", 413, null, "FEED_TOO_LARGE");
   }
 
-  // The static sandbox returns mock document URLs and does not represent a real
-  // production upload target. Skip the external PUT there and continue testing
-  // the SP-API request flow with the returned mock document ID.
-  if (input.environment === "production") {
-    const uploadUrl = safeAmazonDocumentUrl(url, "feed upload");
-    const upload = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "content-type": contentType },
-      body: content,
-      cache: "no-store",
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!upload.ok) {
-      throw new SpApiError(
-        `Amazon feed document upload failed with HTTP ${upload.status}`,
-        upload.status,
-        { statusText: upload.statusText },
-        "FEED_DOCUMENT_UPLOAD_FAILED",
-      );
-    }
+  const uploadUrl = safeAmazonDocumentUrl(url, "feed upload");
+  const upload = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "content-type": contentType },
+    body: content,
+    cache: "no-store",
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!upload.ok) {
+    throw new SpApiError(
+      `Amazon feed document upload failed with HTTP ${upload.status}`,
+      upload.status,
+      { statusText: upload.statusText },
+      "FEED_DOCUMENT_UPLOAD_FAILED",
+    );
   }
 
   const created = await call(input, "/feeds/2021-06-30/feeds", "POST", {
@@ -333,7 +485,6 @@ async function submitFeed(input: Input, fields: Fields) {
       ...record(created.data),
       inputFeedDocumentId: feedDocumentId,
       verification: "Poll Feed status until DONE or FATAL. When DONE, use resultFeedDocumentId with Feed processing report to inspect record-level errors.",
-      sandboxUploadSkipped: input.environment === "sandbox",
     },
   };
 }
@@ -349,33 +500,62 @@ async function getAndDownloadDocument(input: Input, path: string, label: string)
   }
 
   const downloadUrl = safeAmazonDocumentUrl(url, label);
-  const download = await fetch(downloadUrl, {
-    method: "GET",
-    cache: "no-store",
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!download.ok) {
-    throw new SpApiError(
-      `Downloading the ${label} failed with HTTP ${download.status}`,
-      download.status,
-      { statusText: download.statusText },
-      "DOCUMENT_DOWNLOAD_FAILED",
-    );
-  }
 
-  const preview = await readTextPreview(download, documentPreviewLimit);
-  return {
-    ...metadata,
-    data: {
-      ...document,
-      downloaded: {
-        contentType: download.headers.get("content-type"),
-        bytesRead: preview.bytesRead,
-        truncated: preview.truncated,
-        content: preview.text,
+  try {
+    const download = await fetch(downloadUrl, {
+      method: "GET",
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!download.ok) {
+      return {
+        ...metadata,
+        data: {
+          ...document,
+          downloaded: {
+            contentType: null,
+            bytesRead: 0,
+            truncated: false,
+            content: "",
+            error: `Server-side preview failed with HTTP ${download.status} ${download.statusText}. The original Amazon URL is still available below.`,
+          },
+        },
+      };
+    }
+
+    const preview = await readTextPreview(download, documentPreviewLimit);
+    return {
+      ...metadata,
+      data: {
+        ...document,
+        downloaded: {
+          contentType: download.headers.get("content-type"),
+          contentDisposition: download.headers.get("content-disposition"),
+          bytesRead: preview.bytesRead,
+          truncated: preview.truncated,
+          content: preview.text,
+          error: null,
+        },
       },
-    },
-  };
+    };
+  } catch (error) {
+    return {
+      ...metadata,
+      data: {
+        ...document,
+        downloaded: {
+          contentType: null,
+          bytesRead: 0,
+          truncated: false,
+          content: "",
+          error: error instanceof Error
+            ? "Server-side preview failed: " + error.message + ". The original Amazon URL is still available below."
+            : "Server-side preview failed. The original Amazon URL is still available below.",
+        },
+      },
+    };
+  }
 }
 
 async function readTextPreview(response: Response, maxBytes: number) {
@@ -464,17 +644,31 @@ function validateOptionalRange(start: string | undefined, end: string | undefine
   }
 }
 
-function applyBusinessOutcome(operation: Input["operation"], result: CallResult): CallResult {
+function applyBusinessOutcome(input: Input, result: CallResult): CallResult {
+  const operation = input.operation;
   if (!result.ok) return result;
 
   const data = record(result.data);
 
   if (operation === "feed") {
     const processingStatus = typeof data.processingStatus === "string" ? data.processingStatus : "";
+
+    if (input.environment === "sandbox" && processingStatus === "CANCELLED") {
+      return {
+        ...result,
+        data: {
+          ...data,
+          sandboxFixture: true,
+          nextStep: "Amazon's static getFeed fixture intentionally returns CANCELLED. This validates status handling; use Feed processing report to open the separate sandbox document fixture.",
+        },
+      };
+    }
+
     if (processingStatus === "FATAL" || processingStatus === "CANCELLED") {
       return {
         ...result,
         ok: false,
+        status: 422,
         statusText: "Feed processing " + processingStatus.toLowerCase(),
         problem: {
           code: "FEED_" + processingStatus,
@@ -516,6 +710,7 @@ function applyBusinessOutcome(operation: Input["operation"], result: CallResult)
       return {
         ...result,
         ok: false,
+        status: 422,
         statusText: "Report processing " + processingStatus.toLowerCase(),
         problem: {
           code: "REPORT_" + processingStatus,
@@ -561,6 +756,7 @@ function applyBusinessOutcome(operation: Input["operation"], result: CallResult)
       return {
         ...result,
         ok: false,
+        status: 422,
         statusText: "Inbound operation failed",
         problem: {
           code,
@@ -607,6 +803,36 @@ function applyBusinessOutcome(operation: Input["operation"], result: CallResult)
       data: {
         ...data,
         nextStep: "Poll Report status with reportId until DONE, FATAL, or CANCELLED. Download the report only after DONE.",
+      },
+    };
+  }
+
+  if (operation === "submitFeed" && typeof data.feedId === "string") {
+    return {
+      ...result,
+      data: {
+        ...data,
+        nextStep: "Poll Feed status with feedId until DONE, FATAL, or CANCELLED. When DONE, open resultFeedDocumentId to verify record-level processing.",
+      },
+    };
+  }
+
+  if (operation === "itemLabels") {
+    return {
+      ...result,
+      data: {
+        ...data,
+        nextStep: "Use the returned documentDownloads URL to open or download the generated item-label file before it expires.",
+      },
+    };
+  }
+
+  if (operation === "shipmentLabels" || operation === "billOfLading") {
+    return {
+      ...result,
+      data: {
+        ...data,
+        nextStep: "Use Amazon's returned DownloadURL to open or download the generated document before the URL expires.",
       },
     };
   }

@@ -116,6 +116,20 @@ Every SP-API response records the HTTP status, Amazon request ID, applied rate l
 
 Transient errors use method-aware retry rules. HTTP `429` is retried with bounded backoff and the client honors `Retry-After` / `x-amzn-RateLimit-Limit` when available. Read-only GET calls can also retry transient `500`, `502`, `503`, `504`, timeout, and network failures. Write calls are **not** automatically replayed after ambiguous server/network failures because the original write may already have reached Amazon; the workbench tells you to verify the related resource/job state before resubmitting. All SP-API calls include the current `x-amz-date` header.
 
+## Connected result workflows
+
+The workbench renders the useful Amazon response fields directly in the Result panel instead of requiring IDs to be copied out of raw JSON.
+
+- **Reports:** request → report ID → status → report document ID → document preview/open link.
+- **Feeds:** submit → feed ID → status → result feed document ID → processing report.
+- **FBA inbound:** create plan → operation ID → operation status → inbound plan → shipment → shipment labels or bill of lading.
+- **Orders:** search results can be opened as an individual order.
+- **Inventory and prep:** returned records render as tables.
+- **Documents:** report/feed documents get a bounded text preview when possible and always preserve Amazon's original presigned URL. Item labels, shipment labels, and bills of lading expose Amazon's returned download URL.
+
+Amazon's **static** sandbox examples are independent fixtures, so an ID returned by one static example does not always feed into the next example. In Sandbox mode the workbench substitutes the exact fixture required by the selected follow-up operation and explains that behavior in the Result panel. Production does not do this: it passes Amazon's real returned report IDs, feed IDs, document IDs, inbound plan IDs, operation IDs, and shipment IDs into the next operation.
+
+FBA Inventory is different: Amazon currently marks `GET /fba/inventory/v1/summaries` as a **dynamic sandbox** operation. Its results depend on inventory state created in the sandbox, so an empty inventory response is valid and is not replaced with fabricated static data.
 ## Asynchronous-result verification
 
 An HTTP success response can mean that Amazon accepted a job, not that the job ultimately succeeded.

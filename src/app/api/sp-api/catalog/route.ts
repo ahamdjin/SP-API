@@ -38,15 +38,34 @@ export async function POST(request: Request) {
     const identifiers = splitCsv(input.query).slice(0, 20).map((identifier) => input.identifierType === "ASIN" ? identifier.toUpperCase() : identifier);
     const { accessToken } = await getAccessToken(input);
 
-    if (input.environment === "sandbox" && input.mode === "identifier" && input.identifierType === "ASIN" && identifiers.length === 1) {
+    if (input.environment === "sandbox") {
+      const sandboxMarketplaceId = "ATVPDKIKX0DER";
+
+      if (input.mode === "keywords") {
+        const params = new URLSearchParams({
+          keywords: "samsung,tv",
+          marketplaceIds: sandboxMarketplaceId,
+          includedData: sandboxCatalogIncludedData,
+        });
+        const result = await callSpApi({
+          credentials: input,
+          marketplaceId: sandboxMarketplaceId,
+          path: `/catalog/2022-04-01/items?${params.toString()}`,
+          accessToken,
+          environment: input.environment,
+        });
+        return Response.json(result, { status: result.ok ? 200 : result.status, headers: privateHeaders });
+      }
+
+      const sandboxAsin = "B07N4M94X4";
       const params = new URLSearchParams({
-        marketplaceIds: input.marketplaceId,
+        marketplaceIds: sandboxMarketplaceId,
         includedData: sandboxCatalogIncludedData,
       });
       const result = await callSpApi({
         credentials: input,
-        marketplaceId: input.marketplaceId,
-        path: `/catalog/2022-04-01/items/${encodeURIComponent(identifiers[0])}?${params.toString()}`,
+        marketplaceId: sandboxMarketplaceId,
+        path: `/catalog/2022-04-01/items/${sandboxAsin}?${params.toString()}`,
         accessToken,
         environment: input.environment,
       });
@@ -58,7 +77,7 @@ export async function POST(request: Request) {
               numberOfResults: 1,
               items: [result.data],
               sandbox: {
-                note: "Amazon static sandbox only matches predefined Catalog request examples. The official example ASIN is B07N4M94X4 for the US marketplace.",
+                note: "Amazon static sandbox Catalog fixture: B07N4M94X4 in the US marketplace.",
               },
             },
           },
