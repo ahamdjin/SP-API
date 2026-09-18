@@ -496,7 +496,7 @@ export function Workbench() {
             </Field>
             <div className={"security-note " + (environment === "production" ? "production-warning" : "")}>
               <ShieldCheck size={16} />
-              <p>{environment === "sandbox" ? "Sandbox calls use Amazon's mock/test endpoints and do not change production seller data." : "Production mode calls the live seller account. Keep write confirmations enabled and test the same workflow in Sandbox first."}</p>
+              <p>{environment === "sandbox" ? "Sandbox calls use Amazon's test endpoints. Static Sandbox examples require exact values; the workbench shows those values but never silently replaces what you enter." : "Production mode calls the live seller account. Keep write confirmations enabled and test the same workflow in Sandbox first."}</p>
             </div>
           </div>
           <button className="secondary-button full-width" type="submit" disabled={!credentialsComplete || connectionState === "testing"}>
@@ -965,9 +965,7 @@ function OperationResult({
       <ResultDetails rows={[{ label: "Report ID", value: reportId || "Not returned" }]} />
       {reportId && <ActionRow>
         <button className="workflow-action primary" type="button" onClick={() => onFollow("report", { reportId })}><RefreshCw size={15} /> Check report status</button>
-        {environment === "sandbox" && <button className="workflow-action" type="button" onClick={() => onFollow("reportDocument", { reportDocumentId: "0356cf79-b8b0-4226-b4b9-0ee058ea5760" })}><Download size={15} /> Open sandbox document example</button>}
       </ActionRow>}
-      {environment === "sandbox" && <SandboxFlowNote>Amazon&apos;s static Report fixtures are independent: <code>ID323</code> stays IN_PROGRESS, while the document fixture uses <code>0356cf79-b8b0-4226-b4b9-0ee058ea5760</code>. Production chains the real report ID to its real document ID.</SandboxFlowNote>}
     </div>;
   }
 
@@ -981,7 +979,6 @@ function OperationResult({
       <ActionRow>
         {(status === "IN_QUEUE" || status === "IN_PROGRESS") && reportId && <button className="workflow-action primary" type="button" onClick={() => onFollow("report", { reportId })}><RefreshCw size={15} /> Check again</button>}
         {documentId && <button className="workflow-action primary" type="button" onClick={() => onFollow("reportDocument", { reportDocumentId: documentId })}><Download size={15} /> Get report document</button>}
-        {environment === "sandbox" && !documentId && <button className="workflow-action" type="button" onClick={() => onFollow("reportDocument", { reportDocumentId: "0356cf79-b8b0-4226-b4b9-0ee058ea5760" })}><Download size={15} /> Open sandbox document fixture</button>}
       </ActionRow>
       {nextStep && <WorkflowNote>{nextStep}</WorkflowNote>}
     </div>;
@@ -996,7 +993,7 @@ function OperationResult({
         const reportId = stringValue(record.reportId);
         if (reportId) onFollow("report", { reportId });
       }} actionLabel="Open status" />
-      {pageToken && environment === "production" && <PaginationResult token={pageToken} onNext={() => onFollow("reports", { reportNextToken: pageToken })} />}
+      {pageToken && <PaginationResult token={pageToken} onNext={() => onFollow("reports", { reportNextToken: pageToken })} />}
       {reports.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
@@ -1020,7 +1017,6 @@ function OperationResult({
       <ActionRow>
         {(status === "IN_QUEUE" || status === "IN_PROGRESS") && feedId && <button className="workflow-action primary" type="button" onClick={() => onFollow("feed", { feedId })}><RefreshCw size={15} /> Check again</button>}
         {documentId && <button className="workflow-action primary" type="button" onClick={() => onFollow("feedDocument", { feedDocumentId: documentId })}><FileSearch size={15} /> Open processing report</button>}
-        {environment === "sandbox" && !documentId && <button className="workflow-action" type="button" onClick={() => onFollow("feedDocument", { feedDocumentId: "0356cf79-b8b0-4226-b4b9-0ee058ea5760" })}><FileSearch size={15} /> Open sandbox processing report</button>}
       </ActionRow>
       {nextStep && <WorkflowNote>{nextStep}</WorkflowNote>}
     </div>;
@@ -1035,7 +1031,7 @@ function OperationResult({
         const feedId = stringValue(record.feedId);
         if (feedId) onFollow("feed", { feedId });
       }} actionLabel="Open status" />
-      {pageToken && environment === "production" && <PaginationResult token={pageToken} onNext={() => onFollow("feeds", { feedNextToken: pageToken })} />}
+      {pageToken && <PaginationResult token={pageToken} onNext={() => onFollow("feeds", { feedNextToken: pageToken })} />}
       {feeds.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
@@ -1063,7 +1059,6 @@ function OperationResult({
       <ActionRow>
         {status === "IN_PROGRESS" && operationId && <button className="workflow-action primary" type="button" onClick={() => onFollow("inboundOperationStatus", { operationId })}><RefreshCw size={15} /> Check again</button>}
         {status === "SUCCESS" && stringFieldValue(fields, "inboundPlanId") && <button className="workflow-action primary" type="button" onClick={() => onFollow("inboundPlan", { inboundPlanId: stringFieldValue(fields, "inboundPlanId") })}><ArrowRight size={15} /> Open inbound plan</button>}
-        {status === "SUCCESS" && environment === "sandbox" && !stringFieldValue(fields, "inboundPlanId") && <button className="workflow-action" type="button" onClick={() => onFollow("inboundPlan", { inboundPlanId: "wf1234abcd-1234-abcd-5678-1234abcd5678" })}><ArrowRight size={15} /> Open sandbox plan fixture</button>}
       </ActionRow>
       {nextStep && <WorkflowNote>{nextStep}</WorkflowNote>}
     </div>;
@@ -1079,7 +1074,7 @@ function OperationResult({
         const inboundPlanId = stringValue(record.inboundPlanId);
         if (inboundPlanId) onFollow("inboundPlan", { inboundPlanId });
       }} actionLabel="Open plan" />
-      {pageToken && environment === "production" && <PaginationResult token={pageToken} onNext={() => onFollow("inboundPlans", { inboundPaginationToken: pageToken })} />}
+      {pageToken && <PaginationResult token={pageToken} onNext={() => onFollow("inboundPlans", { inboundPaginationToken: pageToken })} />}
       {plans.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
@@ -1103,7 +1098,6 @@ function OperationResult({
         const shipmentId = stringValue(record.shipmentId);
         if (shipmentId && inboundPlanId) onFollow("inboundShipment", { inboundPlanId, shipmentId });
       }} actionLabel="Open shipment" />}
-      {environment === "sandbox" && shipments.length === 0 && <ActionRow><button className="workflow-action" type="button" onClick={() => onFollow("inboundShipment", { inboundPlanId: "wf1234abcd-1234-abcd-5678-1234abcd5678", shipmentId: "sh1234abcd-1234-abcd-5678-1234abcd5678" })}><ArrowRight size={15} /> Open sandbox shipment fixture</button></ActionRow>}
     </div>;
   }
 
@@ -1143,7 +1137,7 @@ function OperationResult({
         const orderId = stringValue(record.orderId) || stringValue(record.amazonOrderId);
         if (orderId) onFollow("order", { orderId });
       }} actionLabel="Open order" />
-      {pageToken && environment === "production" && <PaginationResult token={pageToken} onNext={() => onFollow("orders", { orderPaginationToken: pageToken })} />}
+      {pageToken && <PaginationResult token={pageToken} onNext={() => onFollow("orders", { orderPaginationToken: pageToken })} />}
       {orders.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
@@ -1251,10 +1245,6 @@ function PaginationResult({ token, onNext }: { token: string; onNext: () => void
 
 function WorkflowNote({ children }: { children: React.ReactNode }) {
   return <div className="workflow-note"><FileSearch size={16} /><p>{children}</p></div>;
-}
-
-function SandboxFlowNote({ children }: { children: React.ReactNode }) {
-  return <div className="sandbox-flow-note"><ShieldCheck size={16} /><p>{children}</p></div>;
 }
 
 function RecordList({
