@@ -147,10 +147,17 @@ h2 { margin: 0; font-size: 15px; font-weight: 680; letter-spacing: -.01em; }
 .segmented-control.compact button { min-width: 0; flex: 1; }
 .operation-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 16px; margin: 20px 0; }
 .operation-fields > .field:has(textarea), .operation-fields > .field:has(.choice-grid), .operation-fields > .choice-grid, .operation-fields > .write-confirmation, .operation-fields > .subsection-label { grid-column: 1 / -1; }
-.operation-fields > .check-field, .operation-fields > .dataset-note { grid-column: 1 / -1; }
+.operation-fields > .check-field, .operation-fields > .dataset-note, .operation-fields > .sandbox-input-guide { grid-column: 1 / -1; }
 .subsection-label { padding-top: 4px; color: var(--accent); font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .1em; }
 .check-field { display: flex; align-items: center; gap: 9px; color: #475467; font-size: 11px; cursor: pointer; }
 .check-field input { width: 16px; height: 16px; accent-color: var(--accent); }
+
+.sandbox-input-guide { display: flex; align-items: flex-start; gap: 10px; padding: 13px 14px; border: 1px solid #fedf89; border-radius: 8px; background: #fffaeb; color: #7a5b13; font-size: 10px; line-height: 1.55; }
+.sandbox-input-guide > svg { flex: 0 0 auto; margin-top: 1px; }
+.sandbox-input-guide strong { color: #93370d; }
+.sandbox-input-guide p { margin: 4px 0; }
+.sandbox-input-guide small { display: block; color: #8a6b20; }
+.sandbox-input-guide code { padding: 1px 4px; border: 1px solid #fedf89; border-radius: 4px; background: white; color: #7a2e0e; font-family: var(--font-geist-mono), monospace; font-size: 9px; overflow-wrap: anywhere; }
 .dataset-note { display: flex; align-items: flex-start; gap: 8px; padding: 11px 12px; border: 1px solid #cfe0ff; border-radius: 8px; background: var(--accent-soft); color: #45628f; font-size: 10px; line-height: 1.5; }
 .dataset-note svg { flex: 0 0 auto; margin-top: 1px; }
 .write-confirmation { padding: 12px 14px; border: 1px solid #fedf89; border-radius: 8px; background: #fffaeb; }
