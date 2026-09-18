@@ -116,12 +116,16 @@ export async function POST(request: Request) {
         break;
       }
 
-      case "report":
-        result = await call(input, "/reports/2021-06-30/reports/" + encodeURIComponent(stringField(fields, "reportId")));
+      case "report": {
+        const reportId = input.environment === "sandbox" ? "ID323" : stringField(fields, "reportId");
+        result = await call(input, "/reports/2021-06-30/reports/" + encodeURIComponent(reportId));
         break;
+      }
 
       case "reportDocument": {
-        const reportDocumentId = stringField(fields, "reportDocumentId");
+        const reportDocumentId = input.environment === "sandbox"
+          ? "0356cf79-b8b0-4226-b4b9-0ee058ea5760"
+          : stringField(fields, "reportDocumentId");
         const suffix = input.environment === "sandbox" ? "" : "?enableContentEncodingUrlHeader=true";
         result = await getAndDownloadDocument(
           input,
@@ -361,7 +365,7 @@ export async function POST(request: Request) {
       }
     }
 
-    result = applyBusinessOutcome(input.operation, result);
+    result = applyBusinessOutcome(input, result);
     return Response.json(result, { status: result.ok ? 200 : result.status, headers: privateHeaders });
   } catch (error) {
     return toErrorResponse(error);
@@ -618,13 +622,26 @@ function validateOptionalRange(start: string | undefined, end: string | undefine
   }
 }
 
-function applyBusinessOutcome(operation: Input["operation"], result: CallResult): CallResult {
+function applyBusinessOutcome(input: Input, result: CallResult): CallResult {
+  const operation = input.operation;
   if (!result.ok) return result;
 
   const data = record(result.data);
 
   if (operation === "feed") {
     const processingStatus = typeof data.processingStatus === "string" ? data.processingStatus : "";
+
+    if (input.environment === "sandbox" && processingStatus === "CANCELLED") {
+      return {
+        ...result,
+        data: {
+          ...data,
+          sandboxFixture: true,
+          nextStep: "Amazon's static getFeed fixture intentionally returns CANCELLED. This validates status handling; use Feed processing report to open the separate sandbox document fixture.",
+        },
+      };
+    }
+
     if (processingStatus === "FATAL" || processingStatus === "CANCELLED") {
       return {
         ...result,
