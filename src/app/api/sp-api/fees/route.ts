@@ -3,6 +3,7 @@ import { callSpApi, privateHeaders, toErrorResponse } from "@/lib/sp-api";
 
 export const dynamic = "force-dynamic";
 
+// Fees API entry point: builds Amazon's fee-estimate payload from the workbench form.
 export async function POST(request: Request) {
   try {
     const input = feesRequestSchema.parse(await request.json());
@@ -19,6 +20,7 @@ export async function POST(request: Request) {
         }
       : undefined;
 
+    // Actual Product Fees SP-API call.
     const result = await callSpApi({
       credentials: input,
       marketplaceId: input.marketplaceId,
