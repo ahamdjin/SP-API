@@ -18,6 +18,8 @@ const allOrderData = [
   "FULFILLMENT_ORDERS",
 ].join(",");
 
+const documentPreviewLimit = 2 * 1024 * 1024;
+
 export async function POST(request: Request) {
   try {
     const input = operationRequestSchema.parse(await request.json());
@@ -38,73 +40,111 @@ export async function POST(request: Request) {
         result = await call(input, "/fba/inventory/v1/summaries?" + params);
         break;
       }
+
       case "orders": {
+        const createdAfter = dateField(fields, "createdAfter");
+        const createdBefore = optionalDate(fields, "createdBefore");
+        validateCreatedOrderWindow(createdAfter, createdBefore);
+
         const params = new URLSearchParams({
           marketplaceIds: input.marketplaceId,
-          createdAfter: dateField(fields, "createdAfter"),
+          createdAfter,
           maxResultsPerPage: String(numberField(fields, "pageSize", 1, 100, 50)),
           includedData: allOrderData,
         });
-        addOptional(params, "createdBefore", optionalDate(fields, "createdBefore"));
+        addOptional(params, "createdBefore", createdBefore);
         addCsv(params, "fulfillmentStatuses", optionalString(fields, "statuses"), 7);
         addCsv(params, "fulfilledBy", optionalString(fields, "fulfilledBy"), 2);
         addOptional(params, "paginationToken", optionalString(fields, "orderPaginationToken"));
         result = await call(input, "/orders/2026-01-01/orders?" + params);
         break;
       }
+
       case "order": {
         const orderId = stringField(fields, "orderId");
         result = await call(input, "/orders/2026-01-01/orders/" + encodeURIComponent(orderId) + "?includedData=" + encodeURIComponent(allOrderData));
         break;
       }
+
       case "reports": {
-        const params = new URLSearchParams({
-          marketplaceIds: input.marketplaceId,
-          pageSize: String(numberField(fields, "pageSize", 1, 100, 20)),
-        });
-        addCsv(params, "reportTypes", stringField(fields, "reportTypes"), 10);
-        addCsv(params, "processingStatuses", optionalString(fields, "processingStatuses"), 5);
-        addOptional(params, "createdSince", optionalDate(fields, "createdSince"));
-        addOptional(params, "createdUntil", optionalDate(fields, "createdUntil"));
-        addOptional(params, "nextToken", optionalString(fields, "reportNextToken"));
+        const nextToken = optionalString(fields, "reportNextToken");
+        const params = nextToken
+          ? new URLSearchParams({ nextToken })
+          : new URLSearchParams({
+              marketplaceIds: input.marketplaceId,
+              pageSize: String(numberField(fields, "pageSize", 1, 100, 20)),
+            });
+
+        if (!nextToken) {
+          addCsv(params, "reportTypes", stringField(fields, "reportTypes"), 10);
+          addCsv(params, "processingStatuses", optionalString(fields, "processingStatuses"), 5);
+          addOptional(params, "createdSince", optionalDate(fields, "createdSince"));
+          addOptional(params, "createdUntil", optionalDate(fields, "createdUntil"));
+        }
         result = await call(input, "/reports/2021-06-30/reports?" + params);
         break;
       }
+
       case "createReport": {
         requireConfirmation(fields);
+        const range = optionalDateRange(fields);
+        validateOptionalRange(range.dataStartTime, range.dataEndTime, "dataStartTime", "dataEndTime");
         result = await call(input, "/reports/2021-06-30/reports", "POST", {
           reportType: stringField(fields, "reportType"),
           marketplaceIds: [input.marketplaceId],
-          ...optionalDateRange(fields),
+          ...range,
         });
         break;
       }
+
       case "report":
         result = await call(input, "/reports/2021-06-30/reports/" + encodeURIComponent(stringField(fields, "reportId")));
         break;
+
       case "reportDocument":
-        result = await call(input, "/reports/2021-06-30/documents/" + encodeURIComponent(stringField(fields, "reportDocumentId")) + "?enableContentEncodingUrlHeader=true");
+        result = await getAndDownloadDocument(
+          input,
+          "/reports/2021-06-30/documents/" + encodeURIComponent(stringField(fields, "reportDocumentId")) + "?enableContentEncodingUrlHeader=true",
+          "report document",
+        );
         break;
+
       case "feeds": {
-        const params = new URLSearchParams({
-          marketplaceIds: input.marketplaceId,
-          pageSize: String(numberField(fields, "pageSize", 1, 100, 20)),
-        });
-        addCsv(params, "feedTypes", stringField(fields, "feedTypes"), 10);
-        addCsv(params, "processingStatuses", optionalString(fields, "processingStatuses"), 5);
-        addOptional(params, "createdSince", optionalDate(fields, "createdSince"));
-        addOptional(params, "createdUntil", optionalDate(fields, "createdUntil"));
-        addOptional(params, "nextToken", optionalString(fields, "feedNextToken"));
+        const nextToken = optionalString(fields, "feedNextToken");
+        const params = nextToken
+          ? new URLSearchParams({ nextToken })
+          : new URLSearchParams({
+              marketplaceIds: input.marketplaceId,
+              pageSize: String(numberField(fields, "pageSize", 1, 100, 20)),
+            });
+
+        if (!nextToken) {
+          addCsv(params, "feedTypes", stringField(fields, "feedTypes"), 10);
+          addCsv(params, "processingStatuses", optionalString(fields, "processingStatuses"), 5);
+          addOptional(params, "createdSince", optionalDate(fields, "createdSince"));
+          addOptional(params, "createdUntil", optionalDate(fields, "createdUntil"));
+        }
         result = await call(input, "/feeds/2021-06-30/feeds?" + params);
         break;
       }
+
       case "feed":
         result = await call(input, "/feeds/2021-06-30/feeds/" + encodeURIComponent(stringField(fields, "feedId")));
         break;
+
+      case "feedDocument":
+        result = await getAndDownloadDocument(
+          input,
+          "/feeds/2021-06-30/documents/" + encodeURIComponent(stringField(fields, "feedDocumentId")) + "?enableContentEncodingUrlHeader=true",
+          "feed processing report",
+        );
+        break;
+
       case "submitFeed":
         requireConfirmation(fields);
         result = await submitFeed(input, fields);
         break;
+
       case "inboundPlans": {
         const params = new URLSearchParams({
           pageSize: String(numberField(fields, "pageSize", 1, 30, 10)),
@@ -116,18 +156,26 @@ export async function POST(request: Request) {
         result = await call(input, "/inbound/fba/2024-03-20/inboundPlans?" + params);
         break;
       }
+
       case "inboundPlan":
         result = await call(input, "/inbound/fba/2024-03-20/inboundPlans/" + encodeURIComponent(stringField(fields, "inboundPlanId")));
         break;
+
       case "inboundShipment":
         result = await call(input, "/inbound/fba/2024-03-20/inboundPlans/" + encodeURIComponent(stringField(fields, "inboundPlanId")) + "/shipments/" + encodeURIComponent(stringField(fields, "shipmentId")));
         break;
+
+      case "inboundOperationStatus":
+        result = await call(input, "/inbound/fba/2024-03-20/operations/" + encodeURIComponent(stringField(fields, "operationId")));
+        break;
+
       case "prepDetails": {
         const params = new URLSearchParams({ marketplaceId: input.marketplaceId });
-        addCsv(params, "mskus", stringField(fields, "mskus"), 100, true);
+        addPrepMskus(params, stringField(fields, "mskus"), 100);
         result = await call(input, "/inbound/fba/2024-03-20/items/prepDetails?" + params);
         break;
       }
+
       case "createInboundPlan": {
         requireConfirmation(fields);
         const marketplace = getMarketplace(input.marketplaceId);
@@ -145,10 +193,11 @@ export async function POST(request: Request) {
             countryCode: (optionalString(fields, "countryCode") || marketplace?.locale.slice(-2) || "US").toUpperCase(),
             phoneNumber: stringField(fields, "phoneNumber"),
           },
-          items: parseItems(stringField(fields, "items")),
+          items: parseItems(stringField(fields, "items"), 2000),
         });
         break;
       }
+
       case "itemLabels": {
         const marketplace = getMarketplace(input.marketplaceId);
         result = await call(input, "/inbound/fba/2024-03-20/items/labels", "POST", {
@@ -160,25 +209,35 @@ export async function POST(request: Request) {
         });
         break;
       }
+
       case "shipmentLabels": {
         const shipmentId = stringField(fields, "shipmentId");
         const labelType = optionalString(fields, "shipmentLabelType") || "UNIQUE";
         const numberOfPallets = optionalIntegerField(fields, "numberOfPallets", 1);
-        if (labelType === "PALLET" && !numberOfPallets) throw new SpApiError("numberOfPallets is required for PALLET labels", 400);
+        if (labelType === "PALLET" && !numberOfPallets) {
+          throw new SpApiError("numberOfPallets is required for PALLET labels", 400, null, "MISSING_NUMBER_OF_PALLETS");
+        }
+
         const params = new URLSearchParams({
           PageType: optionalString(fields, "shipmentPageType") || "PackageLabel_Thermal_NonPCP",
           LabelType: labelType,
         });
         addOptional(params, "NumberOfPackages", optionalIntegerField(fields, "numberOfPackages", 1));
         addOptional(params, "NumberOfPallets", numberOfPallets);
+        addOptional(params, "PageSize", optionalIntegerField(fields, "shipmentPageSize", 1));
+        addOptional(params, "PageStartIndex", optionalIntegerField(fields, "pageStartIndex", 0));
+        addRepeatedCsv(params, "PackageLabelsToPrint", optionalString(fields, "packageLabelsToPrint"), 1000);
+
         result = await call(input, "/fba/inbound/v0/shipments/" + encodeURIComponent(shipmentId) + "/labels?" + params);
         break;
       }
+
       case "billOfLading":
         result = await call(input, "/fba/inbound/v0/shipments/" + encodeURIComponent(stringField(fields, "shipmentId")) + "/billOfLading");
         break;
     }
 
+    result = applyBusinessOutcome(input.operation, result);
     return Response.json(result, { status: result.ok ? 200 : result.status, headers: privateHeaders });
   } catch (error) {
     return toErrorResponse(error);
@@ -187,48 +246,357 @@ export async function POST(request: Request) {
 
 type Input = ReturnType<typeof operationRequestSchema.parse>;
 type Fields = Record<string, unknown>;
+type CallResult = Awaited<ReturnType<typeof call>>;
 
 function call(input: Input, path: string, method: "GET" | "POST" = "GET", body?: unknown) {
-  return callSpApi({ credentials: input, marketplaceId: input.marketplaceId, path, method, body });
+  return callSpApi({
+    credentials: input,
+    marketplaceId: input.marketplaceId,
+    environment: input.environment,
+    path,
+    method,
+    body,
+  });
 }
 
 async function submitFeed(input: Input, fields: Fields) {
   const contentType = optionalString(fields, "contentType") || "text/tab-separated-values; charset=UTF-8";
   const document = await call(input, "/feeds/2021-06-30/documents", "POST", { contentType });
   if (!document.ok) return document;
+
   const documentData = record(document.data);
   const url = typeof documentData.url === "string" ? documentData.url : "";
   const feedDocumentId = typeof documentData.feedDocumentId === "string" ? documentData.feedDocumentId : "";
-  if (!url || !feedDocumentId) throw new SpApiError("Amazon did not return a feed upload URL", 502, document.data);
-
-  const uploadUrl = new URL(url);
-  if (uploadUrl.protocol !== "https:" || !(uploadUrl.hostname === "amazonaws.com" || uploadUrl.hostname.endsWith(".amazonaws.com"))) {
-    throw new SpApiError("Amazon returned an unexpected feed upload host", 502);
+  if (!url || !feedDocumentId) {
+    throw new SpApiError("Amazon did not return a feed upload URL and document ID", 502, document.data, "FEED_UPLOAD_URL_MISSING");
   }
 
   const content = stringField(fields, "content");
   if (Buffer.byteLength(content, "utf8") > 5 * 1024 * 1024) {
-    throw new SpApiError("Feed content is limited to 5 MB in this local workbench", 413);
+    throw new SpApiError("Feed content is limited to 5 MB in this workbench", 413, null, "FEED_TOO_LARGE");
   }
 
-  const upload = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "content-type": contentType },
-    body: content,
-    cache: "no-store",
-  });
-  if (!upload.ok) throw new SpApiError("Amazon feed document upload failed", upload.status);
+  // The static sandbox returns mock document URLs and does not represent a real
+  // production upload target. Skip the external PUT there and continue testing
+  // the SP-API request flow with the returned mock document ID.
+  if (input.environment === "production") {
+    const uploadUrl = safeAmazonDocumentUrl(url, "feed upload");
+    const upload = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "content-type": contentType },
+      body: content,
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!upload.ok) {
+      throw new SpApiError(
+        `Amazon feed document upload failed with HTTP ${upload.status}`,
+        upload.status,
+        { statusText: upload.statusText },
+        "FEED_DOCUMENT_UPLOAD_FAILED",
+      );
+    }
+  }
 
-  return call(input, "/feeds/2021-06-30/feeds", "POST", {
+  const created = await call(input, "/feeds/2021-06-30/feeds", "POST", {
     feedType: stringField(fields, "feedType"),
     marketplaceIds: [input.marketplaceId],
     inputFeedDocumentId: feedDocumentId,
   });
+
+  if (!created.ok) return created;
+  return {
+    ...created,
+    data: {
+      ...record(created.data),
+      inputFeedDocumentId: feedDocumentId,
+      verification: "Poll Feed status until DONE or FATAL. When DONE, use resultFeedDocumentId with Feed processing report to inspect record-level errors.",
+      sandboxUploadSkipped: input.environment === "sandbox",
+    },
+  };
+}
+
+async function getAndDownloadDocument(input: Input, path: string, label: string): Promise<CallResult> {
+  const metadata = await call(input, path);
+  if (!metadata.ok) return metadata;
+
+  const document = record(metadata.data);
+  const url = typeof document.url === "string" ? document.url : "";
+  if (!url) {
+    throw new SpApiError(`Amazon returned no URL for the ${label}`, 502, metadata.data, "DOCUMENT_URL_MISSING");
+  }
+
+  const downloadUrl = safeAmazonDocumentUrl(url, label);
+  const download = await fetch(downloadUrl, {
+    method: "GET",
+    cache: "no-store",
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!download.ok) {
+    throw new SpApiError(
+      `Downloading the ${label} failed with HTTP ${download.status}`,
+      download.status,
+      { statusText: download.statusText },
+      "DOCUMENT_DOWNLOAD_FAILED",
+    );
+  }
+
+  const preview = await readTextPreview(download, documentPreviewLimit);
+  return {
+    ...metadata,
+    data: {
+      ...document,
+      downloaded: {
+        contentType: download.headers.get("content-type"),
+        bytesRead: preview.bytesRead,
+        truncated: preview.truncated,
+        content: preview.text,
+      },
+    },
+  };
+}
+
+async function readTextPreview(response: Response, maxBytes: number) {
+  if (!response.body) return { text: "", bytesRead: 0, truncated: false };
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytesRead = 0;
+  let truncated = false;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const remaining = maxBytes - bytesRead;
+    if (remaining <= 0) {
+      truncated = true;
+      await reader.cancel();
+      break;
+    }
+    const chunk = value.byteLength > remaining ? value.slice(0, remaining) : value;
+    chunks.push(chunk);
+    bytesRead += chunk.byteLength;
+    if (value.byteLength > remaining) {
+      truncated = true;
+      await reader.cancel();
+      break;
+    }
+  }
+
+  const merged = new Uint8Array(bytesRead);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return {
+    text: new TextDecoder("utf-8", { fatal: false }).decode(merged),
+    bytesRead,
+    truncated,
+  };
+}
+
+function safeAmazonDocumentUrl(value: string, label: string) {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new SpApiError(`Amazon returned an invalid URL for the ${label}`, 502, { url: value }, "INVALID_DOCUMENT_URL");
+  }
+
+  const host = url.hostname.toLowerCase();
+  const allowedHost =
+    host === "amazonaws.com" ||
+    host.endsWith(".amazonaws.com") ||
+    host === "cloudfront.net" ||
+    host.endsWith(".cloudfront.net");
+
+  if (url.protocol !== "https:" || !allowedHost) {
+    throw new SpApiError(
+      `Amazon returned an unexpected host for the ${label}`,
+      502,
+      { host: url.hostname },
+      "UNEXPECTED_DOCUMENT_HOST",
+    );
+  }
+  return url;
+}
+
+function validateCreatedOrderWindow(createdAfter: string, createdBefore: string) {
+  if (!createdBefore) return;
+  const after = new Date(createdAfter).getTime();
+  const before = new Date(createdBefore).getTime();
+  if (before < after) {
+    throw new SpApiError("createdBefore must be equal to or after createdAfter", 400, null, "INVALID_ORDER_DATE_RANGE");
+  }
+  if (before > Date.now() - 2 * 60 * 1000) {
+    throw new SpApiError("createdBefore must be at least two minutes before the request time", 400, null, "ORDER_CREATED_BEFORE_TOO_RECENT");
+  }
+}
+
+function validateOptionalRange(start: string | undefined, end: string | undefined, startLabel: string, endLabel: string) {
+  if (!start || !end) return;
+  if (new Date(end).getTime() < new Date(start).getTime()) {
+    throw new SpApiError(`${endLabel} must be equal to or after ${startLabel}`, 400, null, "INVALID_DATE_RANGE");
+  }
+}
+
+function applyBusinessOutcome(operation: Input["operation"], result: CallResult): CallResult {
+  if (!result.ok) return result;
+
+  const data = record(result.data);
+
+  if (operation === "feed") {
+    const processingStatus = typeof data.processingStatus === "string" ? data.processingStatus : "";
+    if (processingStatus === "FATAL" || processingStatus === "CANCELLED") {
+      return {
+        ...result,
+        ok: false,
+        statusText: "Feed processing " + processingStatus.toLowerCase(),
+        problem: {
+          code: "FEED_" + processingStatus,
+          message: processingStatus === "FATAL"
+            ? "Amazon aborted the feed during processing. Some records may or may not have been applied."
+            : "Amazon cancelled the feed before processing completed.",
+          details: typeof data.resultFeedDocumentId === "string"
+            ? "resultFeedDocumentId: " + data.resultFeedDocumentId
+            : null,
+          action: typeof data.resultFeedDocumentId === "string"
+            ? "Open Feed processing report with the returned resultFeedDocumentId, fix every reported record error, then submit a corrected feed."
+            : "Review the feed inputs and submit a new feed only after the underlying cause is understood.",
+          retryable: false,
+        },
+      };
+    }
+    if (processingStatus === "DONE") {
+      return {
+        ...result,
+        data: {
+          ...data,
+          nextStep: typeof data.resultFeedDocumentId === "string"
+            ? "Use Feed processing report with resultFeedDocumentId before treating individual records as successful."
+            : "Feed processing is DONE. Confirm the response contains a resultFeedDocumentId and inspect the processing report when available.",
+        },
+      };
+    }
+    if (processingStatus === "IN_QUEUE" || processingStatus === "IN_PROGRESS") {
+      return {
+        ...result,
+        data: { ...data, nextStep: "The feed is still processing. Poll Feed status again later; do not resubmit the same feed just because it is still pending." },
+      };
+    }
+  }
+
+  if (operation === "report") {
+    const processingStatus = typeof data.processingStatus === "string" ? data.processingStatus : "";
+    if (processingStatus === "FATAL" || processingStatus === "CANCELLED") {
+      return {
+        ...result,
+        ok: false,
+        statusText: "Report processing " + processingStatus.toLowerCase(),
+        problem: {
+          code: "REPORT_" + processingStatus,
+          message: processingStatus === "FATAL"
+            ? "Amazon could not complete the report job."
+            : "The report job was cancelled.",
+          details: typeof data.reportId === "string" ? "reportId: " + data.reportId : null,
+          action: "Verify the report type, requested date range, marketplace, and required role. Create a new report only after correcting the cause.",
+          retryable: false,
+        },
+      };
+    }
+    if (processingStatus === "DONE") {
+      return {
+        ...result,
+        data: {
+          ...data,
+          nextStep: typeof data.reportDocumentId === "string"
+            ? "Use Report document with reportDocumentId to download and inspect the generated report."
+            : "Report processing is DONE. Confirm Amazon returned reportDocumentId before attempting a download.",
+        },
+      };
+    }
+    if (processingStatus === "IN_QUEUE" || processingStatus === "IN_PROGRESS") {
+      return {
+        ...result,
+        data: { ...data, nextStep: "The report is still processing. Poll Report status again later instead of creating a duplicate report." },
+      };
+    }
+  }
+
+  if (operation === "inboundOperationStatus") {
+    const operationStatus = typeof data.operationStatus === "string" ? data.operationStatus : "";
+    const problems = Array.isArray(data.operationProblems) ? data.operationProblems.filter((item) => typeof item === "object" && item !== null) : [];
+    const firstProblem = record(problems[0]);
+
+    if (operationStatus === "FAILED") {
+      const code = typeof firstProblem.code === "string" ? firstProblem.code : "INBOUND_OPERATION_FAILED";
+      const message = typeof firstProblem.message === "string"
+        ? firstProblem.message
+        : "The asynchronous Fulfillment Inbound operation finished in a failed state.";
+      const details = problems.length ? JSON.stringify(problems) : null;
+      return {
+        ...result,
+        ok: false,
+        statusText: "Inbound operation failed",
+        problem: {
+          code,
+          message,
+          details,
+          action: "Read every operationProblem, correct the inbound plan/item/shipment data it identifies, then start a new valid operation. Do not assume the original write was applied.",
+          retryable: false,
+        },
+      };
+    }
+
+    if (operationStatus === "IN_PROGRESS") {
+      return {
+        ...result,
+        data: { ...data, nextStep: "This operation has not finished yet. Poll Operation status again before continuing to dependent inbound workflow steps." },
+      };
+    }
+
+    if (operationStatus === "SUCCESS" && problems.length) {
+      return {
+        ...result,
+        data: {
+          ...data,
+          businessWarnings: problems,
+          nextStep: "The operation succeeded, but Amazon returned warnings. Review operationProblems before continuing.",
+        },
+      };
+    }
+  }
+
+  if (operation === "createInboundPlan" && typeof data.operationId === "string") {
+    return {
+      ...result,
+      data: {
+        ...data,
+        nextStep: "Use Operation status with operationId and wait for SUCCESS before continuing with dependent inbound workflow steps.",
+      },
+    };
+  }
+
+  if (operation === "createReport" && typeof data.reportId === "string") {
+    return {
+      ...result,
+      data: {
+        ...data,
+        nextStep: "Poll Report status with reportId until DONE, FATAL, or CANCELLED. Download the report only after DONE.",
+      },
+    };
+  }
+
+  return result;
 }
 
 function stringField(fields: Fields, key: string) {
   const value = fields[key];
-  if (typeof value !== "string" || !value.trim()) throw new SpApiError(key + " is required", 400);
+  if (typeof value !== "string" || !value.trim()) {
+    throw new SpApiError(key + " is required", 400, null, "MISSING_REQUIRED_FIELD");
+  }
   return value.trim();
 }
 
@@ -244,7 +612,7 @@ function booleanField(fields: Fields, key: string) {
 function dateField(fields: Fields, key: string) {
   const value = stringField(fields, key);
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) throw new SpApiError(key + " must be a valid date", 400);
+  if (Number.isNaN(date.getTime())) throw new SpApiError(key + " must be a valid date", 400, null, "INVALID_DATE");
   return date.toISOString();
 }
 
@@ -252,7 +620,7 @@ function optionalDate(fields: Fields, key: string) {
   const value = optionalString(fields, key);
   if (!value) return "";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) throw new SpApiError(key + " must be a valid date", 400);
+  if (Number.isNaN(date.getTime())) throw new SpApiError(key + " must be a valid date", 400, null, "INVALID_DATE");
   return date.toISOString();
 }
 
@@ -260,7 +628,9 @@ function numberField(fields: Fields, key: string, min: number, max: number, fall
   const raw = fields[key];
   if (raw === undefined || raw === "") return fallback;
   const value = Number(raw);
-  if (!Number.isInteger(value) || value < min || value > max) throw new SpApiError(key + " must be between " + min + " and " + max, 400);
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new SpApiError(key + " must be between " + min + " and " + max, 400, null, "INVALID_NUMBER");
+  }
   return value;
 }
 
@@ -268,7 +638,9 @@ function optionalIntegerField(fields: Fields, key: string, min: number) {
   const raw = optionalString(fields, key);
   if (!raw) return "";
   const value = Number(raw);
-  if (!Number.isInteger(value) || value < min) throw new SpApiError(key + " must be an integer of at least " + min, 400);
+  if (!Number.isInteger(value) || value < min) {
+    throw new SpApiError(key + " must be an integer of at least " + min, 400, null, "INVALID_NUMBER");
+  }
   return String(value);
 }
 
@@ -279,9 +651,30 @@ function addOptional(params: URLSearchParams, key: string, value: string) {
 function addCsv(params: URLSearchParams, key: string, value: string, max: number, repeated = false) {
   if (!value) return;
   const values = value.split(/[\n,]/).map((entry) => entry.trim()).filter(Boolean);
-  if (values.length > max) throw new SpApiError(key + " accepts at most " + max + " values", 400);
+  if (values.length > max) throw new SpApiError(key + " accepts at most " + max + " values", 400, null, "TOO_MANY_VALUES");
   if (repeated) values.forEach((entry) => params.append(key, entry));
   else params.set(key, values.join(","));
+}
+
+function addRepeatedCsv(params: URLSearchParams, key: string, value: string, max: number) {
+  if (!value) return;
+  const values = value.split(/[\n,]/).map((entry) => entry.trim()).filter(Boolean);
+  if (values.length > max) throw new SpApiError(key + " accepts at most " + max + " values", 400, null, "TOO_MANY_VALUES");
+  values.forEach((entry) => params.append(key, entry));
+}
+
+function addPrepMskus(params: URLSearchParams, value: string, max: number) {
+  // One MSKU per line: commas are valid MSKU characters and must not be treated as separators.
+  const values = value.split(/\n/).map((entry) => entry.trim()).filter(Boolean);
+  if (values.length > max) throw new SpApiError("mskus accepts at most " + max + " values", 400, null, "TOO_MANY_VALUES");
+  for (const msku of values) params.append("mskus", preEncodePrepMsku(msku));
+}
+
+function preEncodePrepMsku(value: string) {
+  return value
+    .replaceAll("%", "%25")
+    .replaceAll("+", "%2B")
+    .replaceAll(",", "%2C");
 }
 
 function optionalDateRange(fields: Fields) {
@@ -294,20 +687,28 @@ function optionalDateRange(fields: Fields) {
 }
 
 function requireConfirmation(fields: Fields) {
-  if (!booleanField(fields, "confirmed")) throw new SpApiError("Confirm this Amazon write operation before running it", 400);
+  if (!booleanField(fields, "confirmed")) {
+    throw new SpApiError("Confirm this Amazon write operation before running it", 400, null, "WRITE_CONFIRMATION_REQUIRED");
+  }
 }
 
 function parseItems(value: string, max = 2000) {
   const items = value.split(/\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
     const [msku, quantityRaw, prepOwner = "SELLER", labelOwner = "SELLER"] = line.split(",").map((part) => part.trim());
     const quantity = Number(quantityRaw);
-    if (!msku || !Number.isInteger(quantity) || quantity < 1 || quantity > 500000) throw new SpApiError("Each item must use: MSKU, quantity, prep owner, label owner", 400);
-    if (!["AMAZON", "SELLER", "NONE"].includes(prepOwner)) throw new SpApiError("Prep owner must be AMAZON, SELLER, or NONE", 400);
-    if (!["AMAZON", "SELLER", "NONE"].includes(labelOwner)) throw new SpApiError("Label owner must be AMAZON, SELLER, or NONE", 400);
+    if (!msku || !Number.isInteger(quantity) || quantity < 1 || quantity > 500000) {
+      throw new SpApiError("Each item must use: MSKU, quantity, prep owner, label owner", 400, null, "INVALID_ITEM_ROW");
+    }
+    if (!["AMAZON", "SELLER", "NONE"].includes(prepOwner)) {
+      throw new SpApiError("Prep owner must be AMAZON, SELLER, or NONE", 400, null, "INVALID_PREP_OWNER");
+    }
+    if (!["AMAZON", "SELLER", "NONE"].includes(labelOwner)) {
+      throw new SpApiError("Label owner must be AMAZON, SELLER, or NONE", 400, null, "INVALID_LABEL_OWNER");
+    }
     return { msku, quantity, prepOwner, labelOwner };
   });
-  if (items.length === 0) throw new SpApiError("Add at least one item", 400);
-  if (items.length > max) throw new SpApiError("This operation accepts at most " + max + " items", 400);
+  if (items.length === 0) throw new SpApiError("Add at least one item", 400, null, "NO_ITEMS");
+  if (items.length > max) throw new SpApiError("This operation accepts at most " + max + " items", 400, null, "TOO_MANY_ITEMS");
   return items;
 }
 
