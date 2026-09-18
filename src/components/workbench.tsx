@@ -345,6 +345,11 @@ export function Workbench() {
   const catalogItems = useMemo(() => extractCatalogItems(result?.data), [result]);
   const catalogFamily = useMemo(() => extractCatalogFamily(result), [result]);
   const feeSummary = useMemo(() => extractFeeSummary(result), [result]);
+  const catalogNextPageToken = useMemo(() => {
+    if (!result?.ok || !isRecord(result.data)) return "";
+    const pagination = isRecord(result.data.pagination) ? result.data.pagination : {};
+    return stringValue(pagination.nextToken);
+  }, [result]);
   const credentialsComplete = Object.values(credentials).every((value) => value.trim().length > 0);
   const activeItem = operationGroups.flatMap((group) => group.items).find((item) => item.id === operation)!;
   const ActiveIcon = activeItem.icon;
@@ -364,6 +369,13 @@ export function Workbench() {
   function followOperation(nextOperation: Operation, patch: Record<string, FieldValue> = {}) {
     setFields((current) => ({ ...current, ...patch, confirmed: false }));
     setOperation(nextOperation);
+    setResult(null);
+    window.setTimeout(() => document.querySelector(".request-form")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }
+
+  function prepareCatalogNextPage() {
+    if (!catalogNextPageToken) return;
+    setCatalog((current) => ({ ...current, pageToken: catalogNextPageToken }));
     setResult(null);
     window.setTimeout(() => document.querySelector(".request-form")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   }
@@ -518,6 +530,7 @@ export function Workbench() {
               <span className={"operation-badge " + activeItem.kind}>{activeItem.kind}</span>
             </div>
 
+            <ResponseContractCard operation={operation} />
             {activeItem.kind !== "legacy" && <RequirementLegend />}
 
             <OperationFields
@@ -544,7 +557,7 @@ export function Workbench() {
           <div className="result-area">
             <div className="result-heading">
               <div><span className="section-index">03</span><h2>Result</h2></div>
-              {result && <div className="request-meta">{typeof result.status === "number" && <span className={result.ok ? "status-success" : "status-error"}>{result.status} {result.statusText}</span>}{typeof result.durationMs === "number" && <span>{result.durationMs} ms</span>}{typeof result.attempts === "number" && result.attempts > 1 && <span>{result.attempts} attempts</span>}{result.rateLimit && <span>{result.rateLimit} req/s</span>}</div>}
+              {result && <div className="request-meta">{typeof result.status === "number" && <span className={result.ok ? "status-success" : "status-error"}>{result.status} {result.statusText}</span>}{typeof result.durationMs === "number" && <span>{result.durationMs} ms</span>}{typeof result.attempts === "number" && result.attempts > 1 && <span>{result.attempts} attempts</span>}{result.rateLimit && <span>{result.rateLimit} req/s</span>}{result.requestId && <span>Request {result.requestId}</span>}</div>}
             </div>
             {!result && !isLoading && <div className="empty-state"><Braces size={24} /><p>Run the selected operation to inspect Amazon&apos;s response.</p></div>}
             {isLoading && <div className="empty-state loading-state"><LoaderCircle className="spin" size={24} /><p>Waiting for Amazon…</p></div>}
@@ -552,9 +565,11 @@ export function Workbench() {
             {result?.ok && operation === "catalog" && <div className="catalog-results">
               {catalogFamily && <><div className={"family-summary " + (catalogFamily.complete ? "complete" : "partial")}><strong>{catalogFamily.returnedCount} of {catalogFamily.requestedCount} related records returned</strong><span>{catalogFamily.complete ? "Complete variation and package relationship graph" : "Partial related set — one or more related-ASIN calls failed"}</span></div>{catalogFamily.warnings.map((warning, index) => <div className="error-banner" key={warning.code + "-" + index}><X size={18} /><div><strong>Related product lookup · {warning.code}</strong><p>{warning.message}</p><p><strong>What to do:</strong> {warning.action}</p>{warning.requestId && <p><strong>Amazon request ID:</strong> <code>{warning.requestId}</code></p>}</div></div>)}</>}
               {catalogItems.length === 0 ? <p className="no-results">Amazon returned no catalogue items.</p> : <CatalogProductView key={catalogItems.map((item) => item.asin).join("|")} items={catalogItems} />}
-            </div>}
+              {environment === "production" && catalogNextPageToken && <ActionRow><button className="workflow-action primary" type="button" onClick={prepareCatalogNextPage}><ArrowRight size={15} /> Prepare next catalogue page</button></ActionRow>}
+            </div>
             {result?.ok && operation === "fees" && feeSummary && <FeeResult summary={feeSummary} />}
             {result?.ok && operation !== "catalog" && operation !== "fees" && <OperationResult environment={environment} operation={operation} result={result} fields={fields} onFollow={followOperation} />}
+            {result?.ok && <ReturnedDataPanel data={result.data} />}
           </div>
         </section>
 
