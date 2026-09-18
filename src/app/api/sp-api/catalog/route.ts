@@ -31,6 +31,7 @@ export async function POST(request: Request) {
         credentials: input,
         marketplaceId: input.marketplaceId,
         locale: marketplace.locale,
+        environment: input.environment,
         requestedAsin: identifiers[0],
         accessToken,
       });
@@ -61,6 +62,7 @@ export async function POST(request: Request) {
       marketplaceId: input.marketplaceId,
       path: `/catalog/2022-04-01/items?${params.toString()}`,
       accessToken,
+      environment: input.environment,
     });
 
     return Response.json(result, { status: result.ok ? 200 : result.status, headers: privateHeaders });
@@ -75,6 +77,7 @@ type FamilyInput = {
   locale: string;
   requestedAsin: string;
   accessToken: string;
+  environment: Parameters<typeof callSpApi>[0]["environment"];
 };
 
 async function getCompleteRelatedCatalog(input: FamilyInput) {
@@ -150,6 +153,7 @@ function getCatalogItem(input: FamilyInput, asin: string) {
     marketplaceId: input.marketplaceId,
     path: `/catalog/2022-04-01/items/${encodeURIComponent(asin)}?${params.toString()}`,
     accessToken: input.accessToken,
+    environment: input.environment,
   });
 }
 
@@ -167,6 +171,7 @@ function searchCatalogAsins(input: FamilyInput, asins: string[]) {
     marketplaceId: input.marketplaceId,
     path: `/catalog/2022-04-01/items?${params.toString()}`,
     accessToken: input.accessToken,
+    environment: input.environment,
   });
 }
 
