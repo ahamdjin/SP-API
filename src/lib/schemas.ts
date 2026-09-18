@@ -6,8 +6,11 @@ export const credentialsSchema = z.object({
   refreshToken: z.string().trim().min(1, "Refresh token is required"),
 });
 
+export const environmentSchema = z.enum(["production", "sandbox"]);
+
 export const baseRequestSchema = credentialsSchema.extend({
   marketplaceId: z.string().trim().min(1, "Marketplace is required"),
+  environment: environmentSchema.optional().default("production"),
 });
 
 export const catalogRequestSchema = baseRequestSchema.extend({
@@ -49,10 +52,12 @@ export const operationRequestSchema = baseRequestSchema.extend({
     "reportDocument",
     "feeds",
     "feed",
+    "feedDocument",
     "submitFeed",
     "inboundPlans",
     "inboundPlan",
     "inboundShipment",
+    "inboundOperationStatus",
     "prepDetails",
     "createInboundPlan",
     "itemLabels",
