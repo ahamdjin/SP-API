@@ -127,7 +127,14 @@ async function getCompleteRelatedCatalog(input: FamilyInput) {
   if (!exact.ok) return exact;
 
   const items = new Map<string, Record<string, unknown>>();
-  const warnings: Array<{ asins: string[]; status: number; message: string }> = [];
+  const warnings: Array<{
+    asins: string[];
+    status: number;
+    code: string;
+    message: string;
+    action: string;
+    requestId: string | null;
+  }> = [];
   const attemptedAsins = new Set<string>([input.requestedAsin]);
   let durationMs = exact.durationMs;
   addItem(items, exact.data);
@@ -154,7 +161,14 @@ async function getCompleteRelatedCatalog(input: FamilyInput) {
           }
         }
       } else {
-        warnings.push({ asins: batch, status: related.status, message: amazonMessage(related.data) });
+        warnings.push({
+          asins: batch,
+          status: related.status,
+          code: related.problem?.code || `HTTP_${related.status}`,
+          message: related.problem?.message || amazonMessage(related.data),
+          action: related.problem?.action || "Retry the related-ASIN lookup after correcting the reported Amazon error.",
+          requestId: related.requestId,
+        });
       }
     }
   }
