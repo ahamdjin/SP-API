@@ -185,38 +185,99 @@ export async function POST(request: Request) {
         break;
 
       case "inboundPlans": {
-        const params = new URLSearchParams({
-          pageSize: String(numberField(fields, "pageSize", 1, 30, 10)),
-          sortBy: optionalString(fields, "sortBy") || "LAST_UPDATED_TIME",
-          sortOrder: optionalString(fields, "sortOrder") || "DESC",
-        });
-        addOptional(params, "status", optionalString(fields, "status"));
-        addOptional(params, "paginationToken", optionalString(fields, "inboundPaginationToken"));
+        const params = input.environment === "sandbox"
+          ? new URLSearchParams({
+              status: "ACTIVE",
+              sortBy: "LAST_UPDATED_TIME",
+              sortOrder: "ASC",
+              pageSize: "2",
+              paginationToken: "paginationToken",
+            })
+          : new URLSearchParams({
+              pageSize: String(numberField(fields, "pageSize", 1, 30, 10)),
+              sortBy: optionalString(fields, "sortBy") || "LAST_UPDATED_TIME",
+              sortOrder: optionalString(fields, "sortOrder") || "DESC",
+            });
+        if (input.environment !== "sandbox") {
+          addOptional(params, "status", optionalString(fields, "status"));
+          addOptional(params, "paginationToken", optionalString(fields, "inboundPaginationToken"));
+        }
         result = await call(input, "/inbound/fba/2024-03-20/inboundPlans?" + params);
         break;
       }
 
-      case "inboundPlan":
-        result = await call(input, "/inbound/fba/2024-03-20/inboundPlans/" + encodeURIComponent(stringField(fields, "inboundPlanId")));
+      case "inboundPlan": {
+        const inboundPlanId = input.environment === "sandbox"
+          ? "wf1234abcd-1234-abcd-5678-1234abcd5678"
+          : stringField(fields, "inboundPlanId");
+        result = await call(input, "/inbound/fba/2024-03-20/inboundPlans/" + encodeURIComponent(inboundPlanId));
         break;
+      }
 
-      case "inboundShipment":
-        result = await call(input, "/inbound/fba/2024-03-20/inboundPlans/" + encodeURIComponent(stringField(fields, "inboundPlanId")) + "/shipments/" + encodeURIComponent(stringField(fields, "shipmentId")));
+      case "inboundShipment": {
+        const inboundPlanId = input.environment === "sandbox"
+          ? "wf1234abcd-1234-abcd-5678-1234abcd5678"
+          : stringField(fields, "inboundPlanId");
+        const shipmentId = input.environment === "sandbox"
+          ? "sh1234abcd-1234-abcd-5678-1234abcd5678"
+          : stringField(fields, "shipmentId");
+        result = await call(input, "/inbound/fba/2024-03-20/inboundPlans/" + encodeURIComponent(inboundPlanId) + "/shipments/" + encodeURIComponent(shipmentId));
         break;
+      }
 
-      case "inboundOperationStatus":
-        result = await call(input, "/inbound/fba/2024-03-20/operations/" + encodeURIComponent(stringField(fields, "operationId")));
+      case "inboundOperationStatus": {
+        const operationId = input.environment === "sandbox"
+          ? "1234abcd-1234-abcd-5678-1234abcd5678"
+          : stringField(fields, "operationId");
+        result = await call(input, "/inbound/fba/2024-03-20/operations/" + encodeURIComponent(operationId));
         break;
+      }
 
       case "prepDetails": {
-        const params = new URLSearchParams({ marketplaceId: input.marketplaceId });
-        addPrepMskus(params, stringField(fields, "mskus"), 100);
+        const params = new URLSearchParams({
+          marketplaceId: input.environment === "sandbox" ? "ATVPDKIKX0DER" : input.marketplaceId,
+        });
+        if (input.environment === "sandbox") {
+          params.append("mskus", "msku1");
+          params.append("mskus", "msku2");
+        } else {
+          addPrepMskus(params, stringField(fields, "mskus"), 100);
+        }
         result = await call(input, "/inbound/fba/2024-03-20/items/prepDetails?" + params);
         break;
       }
 
       case "createInboundPlan": {
         requireConfirmation(fields);
+
+        if (input.environment === "sandbox") {
+          result = await call(input, "/inbound/fba/2024-03-20/inboundPlans", "POST", {
+            name: "FBA (03/20/2024, 12:01 PM)",
+            sourceAddress: {
+              name: "name",
+              companyName: "Acme",
+              addressLine1: "123 example street",
+              addressLine2: "Unit 102",
+              city: "Toronto",
+              countryCode: "CA",
+              stateOrProvinceCode: "ON",
+              postalCode: "M1M1M1",
+              phoneNumber: "1234567890",
+              email: "email@email.com",
+            },
+            destinationMarketplaces: ["A2EUQ1WTGCTBG2"],
+            items: [{
+              msku: "msku",
+              prepOwner: "AMAZON",
+              labelOwner: "AMAZON",
+              quantity: 2,
+              expiration: "2024-01-01",
+              manufacturingLotCode: "lotCode",
+            }],
+          });
+          break;
+        }
+
         const marketplace = getMarketplace(input.marketplaceId);
         result = await call(input, "/inbound/fba/2024-03-20/inboundPlans", "POST", {
           destinationMarketplaces: [input.marketplaceId],
@@ -238,6 +299,20 @@ export async function POST(request: Request) {
       }
 
       case "itemLabels": {
+        if (input.environment === "sandbox") {
+          result = await call(input, "/inbound/fba/2024-03-20/items/labels", "POST", {
+            marketplaceId: "ATVPDKIKX0DER",
+            mskuQuantities: [
+              { msku: "msku1", quantity: 1 },
+              { msku: "msku2", quantity: 1 },
+            ],
+            labelType: "STANDARD_FORMAT",
+            pageType: "A4_21",
+            localeCode: "en_US",
+          });
+          break;
+        }
+
         const marketplace = getMarketplace(input.marketplaceId);
         result = await call(input, "/inbound/fba/2024-03-20/items/labels", "POST", {
           marketplaceId: input.marketplaceId,
@@ -250,6 +325,15 @@ export async function POST(request: Request) {
       }
 
       case "shipmentLabels": {
+        if (input.environment === "sandbox") {
+          const params = new URLSearchParams({
+            PageType: "PackageLabel_Letter_2",
+            LabelType: "BARCODE_2D",
+          });
+          result = await call(input, "/fba/inbound/v0/shipments/348975493/labels?" + params);
+          break;
+        }
+
         const shipmentId = stringField(fields, "shipmentId");
         const labelType = optionalString(fields, "shipmentLabelType") || "UNIQUE";
         const numberOfPallets = optionalIntegerField(fields, "numberOfPallets", 1);
@@ -266,14 +350,15 @@ export async function POST(request: Request) {
         addOptional(params, "PageSize", optionalIntegerField(fields, "shipmentPageSize", 1));
         addOptional(params, "PageStartIndex", optionalIntegerField(fields, "pageStartIndex", 0));
         addRepeatedCsv(params, "PackageLabelsToPrint", optionalString(fields, "packageLabelsToPrint"), 1000);
-
         result = await call(input, "/fba/inbound/v0/shipments/" + encodeURIComponent(shipmentId) + "/labels?" + params);
         break;
       }
 
-      case "billOfLading":
-        result = await call(input, "/fba/inbound/v0/shipments/" + encodeURIComponent(stringField(fields, "shipmentId")) + "/billOfLading");
+      case "billOfLading": {
+        const shipmentId = input.environment === "sandbox" ? "shipmentId" : stringField(fields, "shipmentId");
+        result = await call(input, "/fba/inbound/v0/shipments/" + encodeURIComponent(shipmentId) + "/billOfLading");
         break;
+      }
     }
 
     result = applyBusinessOutcome(input.operation, result);
