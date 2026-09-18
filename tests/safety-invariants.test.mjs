@@ -36,3 +36,10 @@ test("sandbox fixture values are guidance only, not backend substitutions", () =
   assert.equal(catalogRoute.includes('environment === "sandbox"'), false);
   assert.equal(feesRoute.includes('environment === "sandbox"'), false);
 });
+
+test("production blocks Amazon's removed legacy listings feed types", () => {
+  assert.match(operationsRoute, /REMOVED_LISTING_FEED_TYPE/);
+  assert.match(operationsRoute, /POST_PRODUCT_DATA/);
+  assert.match(operationsRoute, /input\.environment === "production"/);
+  assert.match(operationsRoute, /JSON_LISTINGS_FEED/);
+});
