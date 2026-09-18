@@ -566,7 +566,7 @@ export function Workbench() {
               {catalogFamily && <><div className={"family-summary " + (catalogFamily.complete ? "complete" : "partial")}><strong>{catalogFamily.returnedCount} of {catalogFamily.requestedCount} related records returned</strong><span>{catalogFamily.complete ? "Complete variation and package relationship graph" : "Partial related set — one or more related-ASIN calls failed"}</span></div>{catalogFamily.warnings.map((warning, index) => <div className="error-banner" key={warning.code + "-" + index}><X size={18} /><div><strong>Related product lookup · {warning.code}</strong><p>{warning.message}</p><p><strong>What to do:</strong> {warning.action}</p>{warning.requestId && <p><strong>Amazon request ID:</strong> <code>{warning.requestId}</code></p>}</div></div>)}</>}
               {catalogItems.length === 0 ? <p className="no-results">Amazon returned no catalogue items.</p> : <CatalogProductView key={catalogItems.map((item) => item.asin).join("|")} items={catalogItems} />}
               {environment === "production" && catalogNextPageToken && <ActionRow><button className="workflow-action primary" type="button" onClick={prepareCatalogNextPage}><ArrowRight size={15} /> Prepare next catalogue page</button></ActionRow>}
-            </div>
+            </div>}
             {result?.ok && operation === "fees" && feeSummary && <FeeResult summary={feeSummary} />}
             {result?.ok && operation !== "catalog" && operation !== "fees" && <OperationResult environment={environment} operation={operation} result={result} fields={fields} onFollow={followOperation} />}
             {result?.ok && <ReturnedDataPanel data={result.data} />}
