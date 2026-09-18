@@ -231,6 +231,8 @@ Start with read-only operations in this order: connection test → Catalogue ite
 
 For writes, **Request report** is the safest next test because it creates a report job rather than changing a listing or shipment. Do not use **Submit feed** or **Create inbound plan** as generic connectivity tests; use them only with deliberate seller data and a payload you actually intend Amazon to process.
 
+For Production listing changes, use `JSON_LISTINGS_FEED` (or the Listings Items API for individual SKU changes). Amazon removed the legacy XML/flat listing feed types on July 31, 2025; the workbench rejects those removed listing feed types in Production while still allowing documented legacy fixture values in Static Sandbox.
+
 ## API references
 
 - [Connect to SP-API](https://developer-docs.amazon.com/sp-api/docs/connecting-to-the-selling-partner-api)
