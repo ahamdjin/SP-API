@@ -75,7 +75,15 @@ h2 { margin: 0; font-size: 15px; font-weight: 680; letter-spacing: -.01em; }
 
 .field-stack { display: grid; grid-template-columns: 1fr; gap: 16px; }
 .field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
-.field > span { color: #475467; font-size: 11px; font-weight: 650; }
+.field-label { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; color: #475467; font-size: 11px; font-weight: 650; }
+.field-label > span { min-width: 0; }
+.field-label strong, .requirement-legend strong, .write-confirmation > p strong { margin-left: 2px; color: var(--red); font-weight: 800; }
+.field-label small { flex: 0 0 auto; font-size: 9px; font-weight: 650; }
+.field-label small.required { color: #b42318; }
+.field-label small.optional { color: var(--subtle); }
+.requirement-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 14px; margin: -8px 0 16px; color: var(--subtle); font-size: 9px; }
+.request-intro + .requirement-legend { margin: 14px 0 -4px; }
+.requirement-legend span:first-child { color: #475467; font-weight: 650; }
 .field input, .field textarea, .field select { width: 100%; border: 1px solid #ccd4df; border-radius: 8px; background: white; color: var(--ink); outline: none; padding: 11px 12px; font-size: 12px; transition: border-color .16s ease, box-shadow .16s ease; }
 .field input, .field select { height: 41px; }
 .field textarea { resize: vertical; min-height: 74px; line-height: 1.45; }
@@ -146,6 +154,7 @@ h2 { margin: 0; font-size: 15px; font-weight: 680; letter-spacing: -.01em; }
 .dataset-note { display: flex; align-items: flex-start; gap: 8px; padding: 11px 12px; border: 1px solid #cfe0ff; border-radius: 8px; background: var(--accent-soft); color: #45628f; font-size: 10px; line-height: 1.5; }
 .dataset-note svg { flex: 0 0 auto; margin-top: 1px; }
 .write-confirmation { padding: 12px 14px; border: 1px solid #fedf89; border-radius: 8px; background: #fffaeb; }
+.write-confirmation > p { margin: 0 0 8px; color: #b54708; font-size: 9px; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; }
 .legacy-warning, .success-summary { display: flex; align-items: flex-start; gap: 11px; margin-top: 20px; padding: 14px; border-radius: 8px; }
 .legacy-warning { border: 1px solid #d0d5dd; background: #f9fafb; color: #475467; }
 .success-summary { border: 1px solid #abefc6; background: #ecfdf3; color: #067647; }

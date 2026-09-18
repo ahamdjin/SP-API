@@ -258,12 +258,13 @@ export function Workbench() {
             </button>
           </div>
           <p className="panel-copy">Credentials remain in this browser tab and are never returned in responses.</p>
+          <RequirementLegend />
           <div className="field-stack">
-            <Field label="LWA client ID"><input autoComplete="off" placeholder="amzn1.application-oa2-client…" type={showSecrets ? "text" : "password"} value={credentials.clientId} onChange={(event) => updateCredential("clientId", event.target.value)} /></Field>
-            <Field label="LWA client secret"><input autoComplete="off" placeholder="Enter client secret" type={showSecrets ? "text" : "password"} value={credentials.clientSecret} onChange={(event) => updateCredential("clientSecret", event.target.value)} /></Field>
-            <Field label="Refresh token"><textarea autoComplete="off" placeholder="Atzr|…" rows={4} value={credentials.refreshToken} onChange={(event) => updateCredential("refreshToken", event.target.value)} style={showSecrets ? undefined : { WebkitTextSecurity: "disc" } as React.CSSProperties} /></Field>
-            <Field label="Marketplace">
-              <select value={marketplaceId} onChange={(event) => setMarketplaceId(event.target.value)}>
+            <Field label="LWA client ID" required><input autoComplete="off" required placeholder="amzn1.application-oa2-client…" type={showSecrets ? "text" : "password"} value={credentials.clientId} onChange={(event) => updateCredential("clientId", event.target.value)} /></Field>
+            <Field label="LWA client secret" required><input autoComplete="off" required placeholder="Enter client secret" type={showSecrets ? "text" : "password"} value={credentials.clientSecret} onChange={(event) => updateCredential("clientSecret", event.target.value)} /></Field>
+            <Field label="Refresh token" required><textarea autoComplete="off" required placeholder="Atzr|…" rows={4} value={credentials.refreshToken} onChange={(event) => updateCredential("refreshToken", event.target.value)} style={showSecrets ? undefined : { WebkitTextSecurity: "disc" } as React.CSSProperties} /></Field>
+            <Field label="Marketplace" required>
+              <select required value={marketplaceId} onChange={(event) => setMarketplaceId(event.target.value)}>
                 {marketplaces.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.currency} · {item.id}</option>)}
               </select>
             </Field>
@@ -294,6 +295,8 @@ export function Workbench() {
               </div>
               <span className={"operation-badge " + activeItem.kind}>{activeItem.kind}</span>
             </div>
+
+            {activeItem.kind !== "legacy" && <RequirementLegend />}
 
             <OperationFields
               operation={operation}
@@ -385,32 +388,32 @@ function OperationFields({
   currency: string;
 }) {
   if (operation === "catalog") return <div className="operation-fields">
-    <Choice label="Search mode" options={["identifier", "keywords"]} value={catalog.mode} onChange={(value) => setCatalog((current) => ({ ...current, mode: value as "identifier" | "keywords" }))} />
-    {catalog.mode === "identifier" && <Choice label="Identifier type" options={["ASIN", "UPC", "EAN", "GTIN", "ISBN", "SKU", "JAN", "MINSAN"]} value={catalog.identifierType} onChange={(value) => setCatalog((current) => ({ ...current, identifierType: value }))} />}
-    <Field label={catalog.mode === "keywords" ? "Search terms" : "Product identifier(s)"}><input required placeholder={catalog.mode === "keywords" ? "wireless barcode scanner" : "One value, or up to 20 separated by commas"} value={catalog.query} onChange={(event) => setCatalog((current) => ({ ...current, query: event.target.value }))} /></Field>
-    {catalog.identifierType === "SKU" && catalog.mode === "identifier" && <Field label="Seller ID"><input required placeholder="A1XXXXXXXXXXXX" value={catalog.sellerId} onChange={(event) => setCatalog((current) => ({ ...current, sellerId: event.target.value }))} /></Field>}
+    <Choice label="Search mode" required options={["identifier", "keywords"]} value={catalog.mode} onChange={(value) => setCatalog((current) => ({ ...current, mode: value as "identifier" | "keywords" }))} />
+    {catalog.mode === "identifier" && <Choice label="Identifier type" required options={["ASIN", "UPC", "EAN", "GTIN", "ISBN", "SKU", "JAN", "MINSAN"]} value={catalog.identifierType} onChange={(value) => setCatalog((current) => ({ ...current, identifierType: value }))} />}
+    <Field label={catalog.mode === "keywords" ? "Search terms" : "Product identifier(s)"} required><input required placeholder={catalog.mode === "keywords" ? "wireless barcode scanner" : "One value, or up to 20 separated by commas"} value={catalog.query} onChange={(event) => setCatalog((current) => ({ ...current, query: event.target.value }))} /></Field>
+    {catalog.identifierType === "SKU" && catalog.mode === "identifier" && <Field label="Seller ID" required requirement="Required for SKU"><input required placeholder="A1XXXXXXXXXXXX" value={catalog.sellerId} onChange={(event) => setCatalog((current) => ({ ...current, sellerId: event.target.value }))} /></Field>}
     {catalog.mode === "identifier" && catalog.identifierType === "ASIN" && <CheckField label="Fetch every related variation and package ASIN for one ASIN" checked={catalog.includeVariations} onChange={(includeVariations) => setCatalog((current) => ({ ...current, includeVariations }))} />}
     {catalog.mode === "keywords" && <>
-      <Field label="Brand names"><input placeholder="Optional · Nike,Adidas" value={catalog.brandNames} onChange={(event) => setCatalog((current) => ({ ...current, brandNames: event.target.value }))} /></Field>
-      <Field label="Classification IDs"><input placeholder="Optional · comma-separated" value={catalog.classificationIds} onChange={(event) => setCatalog((current) => ({ ...current, classificationIds: event.target.value }))} /></Field>
+      <Field label="Brand names"><input placeholder="Nike,Adidas" value={catalog.brandNames} onChange={(event) => setCatalog((current) => ({ ...current, brandNames: event.target.value }))} /></Field>
+      <Field label="Classification IDs"><input placeholder="Comma-separated" value={catalog.classificationIds} onChange={(event) => setCatalog((current) => ({ ...current, classificationIds: event.target.value }))} /></Field>
       <Field label="Results per page"><input min="1" max="20" type="number" value={catalog.pageSize} onChange={(event) => setCatalog((current) => ({ ...current, pageSize: event.target.value }))} /></Field>
-      <Field label="Next-page token"><input placeholder="Optional · from the previous response" value={catalog.pageToken} onChange={(event) => setCatalog((current) => ({ ...current, pageToken: event.target.value }))} /></Field>
+      <Field label="Next-page token"><input placeholder="From the previous response" value={catalog.pageToken} onChange={(event) => setCatalog((current) => ({ ...current, pageToken: event.target.value }))} /></Field>
     </>}
     <div className="dataset-note"><Check size={15} /><span>Requests attributes, classifications, dimensions, identifiers, images, product types, relationships, sales ranks, summaries, and vendor details.</span></div>
   </div>;
 
   if (operation === "fees") return <div className="operation-fields">
-    <Choice label="Lookup by" options={["ASIN", "SKU"]} value={fees.idType} onChange={(value) => setFees((current) => ({ ...current, idType: value as "ASIN" | "SKU" }))} />
-    <Field label={fees.idType}><input required placeholder={fees.idType === "ASIN" ? "B0XXXXXXXX" : "SELLER-SKU"} value={fees.identifier} onChange={(event) => setFees((current) => ({ ...current, identifier: event.target.value }))} /></Field>
-    <Field label={"Listing price · " + currency}><input required min="0.01" step="0.01" type="number" placeholder="29.99" value={fees.price} onChange={(event) => setFees((current) => ({ ...current, price: event.target.value }))} /></Field>
-    <Field label={"Shipping · " + currency}><input required min="0" step="0.01" type="number" value={fees.shipping} onChange={(event) => setFees((current) => ({ ...current, shipping: event.target.value }))} /></Field>
-    <Choice label="Fulfilment" options={["FBA", "Merchant"]} value={fees.isAmazonFulfilled ? "FBA" : "Merchant"} onChange={(value) => setFees((current) => ({ ...current, isAmazonFulfilled: value === "FBA" }))} />
+    <Choice label="Lookup by" required options={["ASIN", "SKU"]} value={fees.idType} onChange={(value) => setFees((current) => ({ ...current, idType: value as "ASIN" | "SKU" }))} />
+    <Field label={fees.idType} required><input required placeholder={fees.idType === "ASIN" ? "B0XXXXXXXX" : "SELLER-SKU"} value={fees.identifier} onChange={(event) => setFees((current) => ({ ...current, identifier: event.target.value }))} /></Field>
+    <Field label={"Listing price · " + currency} required><input required min="0.01" step="0.01" type="number" placeholder="29.99" value={fees.price} onChange={(event) => setFees((current) => ({ ...current, price: event.target.value }))} /></Field>
+    <Field label={"Shipping · " + currency}><input min="0" step="0.01" type="number" value={fees.shipping} onChange={(event) => setFees((current) => ({ ...current, shipping: event.target.value }))} /></Field>
+    <Choice label="Fulfilment" required options={["FBA", "Merchant"]} value={fees.isAmazonFulfilled ? "FBA" : "Merchant"} onChange={(value) => setFees((current) => ({ ...current, isAmazonFulfilled: value === "FBA" }))} />
   </div>;
 
   const value = (key: string) => String(fields[key] ?? "");
-  const text = (key: string, label: string, placeholder = "", required = false) => <Field label={label}><input required={required} placeholder={placeholder} value={value(key)} onChange={(event) => updateField(key, event.target.value)} /></Field>;
-  const date = (key: string, label: string, required = false) => <Field label={label}><input required={required} type="datetime-local" value={value(key)} onChange={(event) => updateField(key, event.target.value)} /></Field>;
-  const textarea = (key: string, label: string, placeholder = "", required = false) => <Field label={label}><textarea required={required} placeholder={placeholder} rows={5} value={value(key)} onChange={(event) => updateField(key, event.target.value)} /></Field>;
+  const text = (key: string, label: string, placeholder = "", required = false, requirement?: string) => <Field label={label} required={required} requirement={requirement}><input required={required} placeholder={placeholder} value={value(key)} onChange={(event) => updateField(key, event.target.value)} /></Field>;
+  const date = (key: string, label: string, required = false) => <Field label={label} required={required}><input required={required} type="datetime-local" value={value(key)} onChange={(event) => updateField(key, event.target.value)} /></Field>;
+  const textarea = (key: string, label: string, placeholder = "", required = false) => <Field label={label} required={required}><textarea required={required} placeholder={placeholder} rows={5} value={value(key)} onChange={(event) => updateField(key, event.target.value)} /></Field>;
 
   let content: React.ReactNode;
   switch (operation) {
@@ -442,7 +445,7 @@ function OperationFields({
       content = text("feedId", "Feed ID", "123456789", true);
       break;
     case "submitFeed":
-      content = <>{text("feedType", "Feed type", "JSON_LISTINGS_FEED", true)}{text("contentType", "Content type", "application/json; charset=UTF-8", true)}{textarea("content", "Feed content", "Paste the complete JSON or tab-delimited feed payload", true)}<Confirmation fields={fields} updateField={updateField} label="I understand this uploads data and starts a feed in Amazon." /></>;
+      content = <>{text("feedType", "Feed type", "JSON_LISTINGS_FEED", true)}{text("contentType", "Content type", "Defaults to application/json; charset=UTF-8")}{textarea("content", "Feed content", "Paste the complete JSON or tab-delimited feed payload", true)}<Confirmation fields={fields} updateField={updateField} label="I understand this uploads data and starts a feed in Amazon." /></>;
       break;
     case "inboundPlans":
       content = <><Choice label="Plan status" options={["ACTIVE", "SHIPPED", "VOIDED"]} value={value("status")} onChange={(next) => updateField("status", next)} /><Choice label="Sort by" options={["LAST_UPDATED_TIME", "CREATION_TIME"]} value={value("sortBy")} onChange={(next) => updateField("sortBy", next)} /><Choice label="Sort order" options={["DESC", "ASC"]} value={value("sortOrder")} onChange={(next) => updateField("sortOrder", next)} />{text("pageSize", "Results per page", "10")}{text("inboundPaginationToken", "Next-page token", "Optional · from the previous response")}</>;
@@ -457,14 +460,16 @@ function OperationFields({
       content = textarea("mskus", "Merchant SKUs", "One MSKU per line", true);
       break;
     case "createInboundPlan":
-      content = <>{text("planName", "Plan name", "September replenishment")}{textarea("items", "Items", "MSKU, quantity, prep owner, label owner", true)}<div className="subsection-label">Ship-from address</div>{text("contactName", "Contact name", "Jane Smith", true)}{text("companyName", "Company")}{text("addressLine1", "Address line 1", "123 Main Street", true)}{text("addressLine2", "Address line 2")}{text("city", "City", "Toronto", true)}{text("stateOrProvinceCode", "State / province", "ON")}{text("postalCode", "Postal code", "M1M 1M1", true)}{text("countryCode", "Country code", "CA", true)}{text("phoneNumber", "Phone number", "+1 555 0100", true)}<Confirmation fields={fields} updateField={updateField} label="I understand this creates an inbound plan in Amazon." /></>;
+      content = <>{text("planName", "Plan name", "September replenishment")}{textarea("items", "Items", "MSKU, quantity, prep owner, label owner", true)}<div className="subsection-label">Ship-from address</div>{text("contactName", "Contact name", "Jane Smith", true)}{text("companyName", "Company")}{text("addressLine1", "Address line 1", "123 Main Street", true)}{text("addressLine2", "Address line 2")}{text("city", "City", "Toronto", true)}{text("stateOrProvinceCode", "State / province", "ON")}{text("postalCode", "Postal code", "M1M 1M1", true)}{text("countryCode", "Country code", "Defaults to marketplace country")}{text("phoneNumber", "Phone number", "+1 555 0100", true)}<Confirmation fields={fields} updateField={updateField} label="I understand this creates an inbound plan in Amazon." /></>;
       break;
     case "itemLabels":
-      content = <>{textarea("items", "Items", "MSKU, quantity", true)}<Choice label="Label format" options={["STANDARD_FORMAT", "THERMAL_PRINTING"]} value={value("labelType")} onChange={(next) => updateField("labelType", next)} /><Choice label="Page type" options={["A4_21", "A4_24", "A4_24_64x33", "A4_24_66x35", "A4_24_70x36", "A4_24_70x37", "A4_24i", "A4_27", "A4_40_52x29", "A4_44_48x25", "Letter_30"]} value={value("pageType")} onChange={(next) => updateField("pageType", next)} /></>;
+      content = <>{textarea("items", "Items", "MSKU, quantity", true)}<Choice label="Label format" required options={["STANDARD_FORMAT", "THERMAL_PRINTING"]} value={value("labelType")} onChange={(next) => updateField("labelType", next)} /><Choice label="Page type" options={["A4_21", "A4_24", "A4_24_64x33", "A4_24_66x35", "A4_24_70x36", "A4_24_70x37", "A4_24i", "A4_27", "A4_40_52x29", "A4_44_48x25", "Letter_30"]} value={value("pageType")} onChange={(next) => updateField("pageType", next)} /></>;
       break;
-    case "shipmentLabels":
-      content = <>{text("shipmentId", "Shipment ID", "FBA123456789", true)}<Choice label="Label type" options={["UNIQUE", "BARCODE_2D", "PALLET"]} value={value("shipmentLabelType")} onChange={(next) => updateField("shipmentLabelType", next)} />{text("shipmentPageType", "Page type", "PackageLabel_Thermal_NonPCP", true)}{text("numberOfPackages", "Number of packages", "Optional")}{text("numberOfPallets", "Number of pallets", "Required for pallet labels")}</>;
+    case "shipmentLabels": {
+      const palletLabels = value("shipmentLabelType") === "PALLET";
+      content = <>{text("shipmentId", "Shipment ID", "FBA123456789", true)}<Choice label="Label type" required options={["UNIQUE", "BARCODE_2D", "PALLET"]} value={value("shipmentLabelType")} onChange={(next) => updateField("shipmentLabelType", next)} />{text("shipmentPageType", "Page type", "Defaults to PackageLabel_Thermal_NonPCP")}{text("numberOfPackages", "Number of packages")}{text("numberOfPallets", "Number of pallets", "", palletLabels, palletLabels ? "Required for PALLET labels" : undefined)}</>;
       break;
+    }
     case "billOfLading":
       content = text("shipmentId", "Shipment ID", "FBA123456789", true);
       break;
@@ -474,12 +479,20 @@ function OperationFields({
   return <div className="operation-fields">{content}</div>;
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="field"><span>{label}</span>{children}</label>;
+function RequirementLegend() {
+  return <div className="requirement-legend"><span><strong>*</strong> Required</span><span>Everything else is marked optional</span></div>;
 }
 
-function Choice({ label, options, value, onChange }: { label: string; options: string[]; value: string; onChange: (value: string) => void }) {
-  return <div className="field"><span>{label}</span><div className="choice-grid identifier-choices" role="radiogroup" aria-label={label}>{options.map((option) => <button aria-checked={option === value} className={option === value ? "selected" : ""} key={option} onClick={() => onChange(option)} role="radio" type="button">{formatLabel(option)}</button>)}</div></div>;
+function FieldLabel({ label, required = false, requirement }: { label: string; required?: boolean; requirement?: string }) {
+  return <span className="field-label"><span>{label}{required && <strong aria-hidden="true">*</strong>}</span><small className={required ? "required" : "optional"}>{requirement ?? (required ? "Required" : "Optional")}</small></span>;
+}
+
+function Field({ label, required = false, requirement, children }: { label: string; required?: boolean; requirement?: string; children: React.ReactNode }) {
+  return <label className="field"><FieldLabel label={label} required={required} requirement={requirement} />{children}</label>;
+}
+
+function Choice({ label, required = false, options, value, onChange }: { label: string; required?: boolean; options: string[]; value: string; onChange: (value: string) => void }) {
+  return <div className="field"><FieldLabel label={label} required={required} /><div aria-required={required} className="choice-grid identifier-choices" role="radiogroup" aria-label={label}>{options.map((option) => <button aria-checked={option === value} className={option === value ? "selected" : ""} key={option} onClick={() => onChange(option)} role="radio" type="button">{formatLabel(option)}</button>)}</div></div>;
 }
 
 function CheckField({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
@@ -487,7 +500,7 @@ function CheckField({ label, checked, onChange }: { label: string; checked: bool
 }
 
 function Confirmation({ fields, updateField, label }: { fields: Record<string, FieldValue>; updateField: (key: string, value: FieldValue) => void; label: string }) {
-  return <div className="write-confirmation"><CheckField checked={Boolean(fields.confirmed)} label={label} onChange={(checked) => updateField("confirmed", checked)} /></div>;
+  return <div className="write-confirmation"><p><strong>*</strong> Required confirmation</p><CheckField checked={Boolean(fields.confirmed)} label={label} onChange={(checked) => updateField("confirmed", checked)} /></div>;
 }
 
 type CatalogItem = { asin: string; title: string; brand: string; productType: string; images: string[]; identifiers: string[]; datasets: string[] };

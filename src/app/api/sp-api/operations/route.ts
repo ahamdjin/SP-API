@@ -162,12 +162,15 @@ export async function POST(request: Request) {
       }
       case "shipmentLabels": {
         const shipmentId = stringField(fields, "shipmentId");
+        const labelType = optionalString(fields, "shipmentLabelType") || "UNIQUE";
+        const numberOfPallets = optionalIntegerField(fields, "numberOfPallets", 1);
+        if (labelType === "PALLET" && !numberOfPallets) throw new SpApiError("numberOfPallets is required for PALLET labels", 400);
         const params = new URLSearchParams({
           PageType: optionalString(fields, "shipmentPageType") || "PackageLabel_Thermal_NonPCP",
-          LabelType: optionalString(fields, "shipmentLabelType") || "UNIQUE",
+          LabelType: labelType,
         });
         addOptional(params, "NumberOfPackages", optionalIntegerField(fields, "numberOfPackages", 1));
-        addOptional(params, "NumberOfPallets", optionalIntegerField(fields, "numberOfPallets", 1));
+        addOptional(params, "NumberOfPallets", numberOfPallets);
         result = await call(input, "/fba/inbound/v0/shipments/" + encodeURIComponent(shipmentId) + "/labels?" + params);
         break;
       }
