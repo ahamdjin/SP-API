@@ -870,9 +870,13 @@ function OperationResult({
 
   if (operation === "orders") {
     const orders = arrayRecords(data.orders);
+    const orderRows = orders.map((order) => {
+      const fulfillment = isRecord(order.fulfillment) ? order.fulfillment : {};
+      return { ...order, displayStatus: stringValue(fulfillment.fulfillmentStatus) || stringValue(order.orderStatus) };
+    });
     return <div className="workflow-results">
       <SuccessLead title={String(orders.length) + " order" + (orders.length === 1 ? "" : "s") + " returned"} copy="Open an order to inspect the full Amazon response." />
-      <RecordList records={orders} idKey="orderId" titleKey="orderId" statusKey="orderStatus" onOpen={(record) => {
+      <RecordList records={orderRows} idKey="orderId" titleKey="orderId" statusKey="displayStatus" onOpen={(record) => {
         const orderId = stringValue(record.orderId) || stringValue(record.amazonOrderId);
         if (orderId) onFollow("order", { orderId });
       }} actionLabel="Open order" />
