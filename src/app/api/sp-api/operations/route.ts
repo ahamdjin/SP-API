@@ -513,7 +513,8 @@ function addRepeatedCsv(params: URLSearchParams, key: string, value: string, max
 }
 
 function addPrepMskus(params: URLSearchParams, value: string, max: number) {
-  const values = value.split(/\n/).flatMap((line) => line.split(/,(?=\s*[^,]+$)/).length === 1 ? [line] : [line]).map((entry) => entry.trim()).filter(Boolean);
+  // One MSKU per line: commas are valid MSKU characters and must not be treated as separators.
+  const values = value.split(/\n/).map((entry) => entry.trim()).filter(Boolean);
   if (values.length > max) throw new SpApiError("mskus accepts at most " + max + " values", 400, null, "TOO_MANY_VALUES");
   for (const msku of values) params.append("mskus", preEncodePrepMsku(msku));
 }
