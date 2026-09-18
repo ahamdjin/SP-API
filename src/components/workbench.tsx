@@ -78,8 +78,8 @@ const defaultFields: Record<string, FieldValue> = {
   createdBefore: "",
   statuses: "UNSHIPPED,SHIPPED",
   fulfilledBy: "AMAZON",
-  reportTypes: "GET_FLAT_FILE_OPEN_LISTINGS_DATA",
-  reportType: "GET_FLAT_FILE_OPEN_LISTINGS_DATA",
+  reportTypes: "GET_MERCHANT_LISTINGS_ALL_DATA",
+  reportType: "GET_MERCHANT_LISTINGS_ALL_DATA",
   processingStatuses: "DONE,IN_PROGRESS,IN_QUEUE",
   feedTypes: "JSON_LISTINGS_FEED",
   feedType: "JSON_LISTINGS_FEED",
@@ -184,6 +184,7 @@ const responseContracts: Record<Operation, ResponseContract> = {
     returns: ["payload.granularity", "payload.inventorySummaries[]", "inventoryDetails quantities", "pagination.nextToken"],
     next: "Use pagination.nextToken to continue. Dynamic Sandbox inventory can legitimately be empty.",
     pagination: "pagination.nextToken",
+    note: "Amazon inventory next tokens expire quickly (currently 30 seconds), so request the next page promptly.",
   },
   orders: {
     request: "GET /orders/2026-01-01/orders",
@@ -721,12 +722,12 @@ function OperationFields({
     case "reports":
       content = environment === "sandbox"
         ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox uses Amazon&apos;s fixed list-reports fixture: FEE_DISCOUNTS_REPORT + GET_AFN_INVENTORY_DATA with IN_QUEUE + IN_PROGRESS. The workbench sends those exact parameters automatically.</span></div>
-        : <>{text("reportTypes", "Report type(s)", "GET_FLAT_FILE_OPEN_LISTINGS_DATA", true)}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("reportNextToken", "Next-page token", "Optional · from the previous response")}</>;
+        : <>{text("reportTypes", "Report type(s)", "GET_MERCHANT_LISTINGS_ALL_DATA", true)}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("reportNextToken", "Next-page token", "Optional · from the previous response")}</>;
       break;
     case "createReport":
       content = environment === "sandbox"
         ? <><div className="dataset-note"><Check size={15} /><span>Static Sandbox uses Amazon&apos;s official create-report fixture automatically: GET_MERCHANT_LISTINGS_ALL_DATA, start 2024-03-10T20:11:24.000Z, marketplaces Germany + US. A successful response returns report ID ID323.</span></div><Confirmation fields={fields} updateField={updateField} label="I understand this sends Amazon&apos;s fixed Sandbox report request." /></>
-        : <>{text("reportType", "Report type", "GET_FLAT_FILE_OPEN_LISTINGS_DATA", true)}{date("dataStartTime", "Data start")}{date("dataEndTime", "Data end")}<Confirmation fields={fields} updateField={updateField} label="I understand this starts a report job in Amazon." /></>;
+        : <>{text("reportType", "Report type", "GET_MERCHANT_LISTINGS_ALL_DATA", true)}{date("dataStartTime", "Data start")}{date("dataEndTime", "Data end")}<Confirmation fields={fields} updateField={updateField} label="I understand this starts a report job in Amazon." /></>;
       break;
     case "report":
       content = environment === "sandbox"
