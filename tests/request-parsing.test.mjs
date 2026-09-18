@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseCsvFields, preserveIsoInstant } from "../src/lib/request-parsing.ts";
+import { parseCsvFields, preserveIsoDate, preserveIsoInstant } from "../src/lib/request-parsing.ts";
 
 test("preserveIsoInstant keeps an exact UTC sandbox fixture timestamp", () => {
   assert.equal(
@@ -51,4 +51,12 @@ test("parseCsvFields rejects an unclosed quoted field", () => {
     () => parseCsvFields('"SKU,WITH,COMMA, 2, SELLER, SELLER'),
     /Unclosed quoted CSV field/,
   );
+});
+
+test("preserveIsoDate accepts real inbound expiration dates", () => {
+  assert.equal(preserveIsoDate("2024-02-29"), "2024-02-29");
+});
+
+test("preserveIsoDate rejects impossible expiration dates", () => {
+  assert.equal(preserveIsoDate("2024-02-31"), null);
 });
