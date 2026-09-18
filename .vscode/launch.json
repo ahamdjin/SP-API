@@ -5,7 +5,7 @@
       "name": "SP-API Local",
       "type": "node-terminal",
       "request": "launch",
-      "command": "npm run dev",
+      "command": "npm run visualstudio",
       "cwd": "${workspaceFolder}",
       "serverReadyAction": {
         "pattern": "Local:\\s+(https?://\\S+)",
