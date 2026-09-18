@@ -152,6 +152,170 @@ const operationGroups: Array<{ label: string; items: OperationItem[] }> = [
   },
 ];
 
+
+type ResponseContract = {
+  request: string;
+  delivery: string;
+  returns: string[];
+  next: string;
+  pagination?: string;
+  note?: string;
+};
+
+const responseContracts: Record<Operation, ResponseContract> = {
+  catalog: {
+    request: "GET Catalog Items 2022-04-01",
+    delivery: "Immediate JSON response",
+    returns: ["items[] / item", "images", "identifiers", "dimensions", "relationships", "sales ranks", "attributes and summaries"],
+    next: "Use related ASINs or the returned catalog pagination token when available.",
+    pagination: "pagination.nextToken",
+    note: "Exact ASIN lookup can recursively fetch related variation/package ASINs in Production.",
+  },
+  fees: {
+    request: "POST Product Fees v0",
+    delivery: "Immediate JSON response",
+    returns: ["payload.FeesEstimateResult.Status", "FeesEstimateIdentifier", "TotalFeesEstimate", "FeeDetailList", "embedded business error"],
+    next: "Use the fee estimate as pricing guidance; Amazon notes that actual charged fees can differ.",
+  },
+  inventory: {
+    request: "GET /fba/inventory/v1/summaries",
+    delivery: "Immediate JSON response",
+    returns: ["payload.granularity", "payload.inventorySummaries[]", "inventoryDetails quantities", "pagination.nextToken"],
+    next: "Use pagination.nextToken to continue. Dynamic Sandbox inventory can legitimately be empty.",
+    pagination: "pagination.nextToken",
+  },
+  orders: {
+    request: "GET /orders/2026-01-01/orders",
+    delivery: "Immediate JSON response",
+    returns: ["orders[]", "orderItems", "buyer / recipient", "proceeds / payment / tax", "fulfillment / packages", "pagination.nextToken"],
+    next: "Open an order by orderId or continue with pagination.nextToken.",
+    pagination: "pagination.nextToken",
+  },
+  order: {
+    request: "GET /orders/2026-01-01/orders/{orderId}",
+    delivery: "Immediate JSON response",
+    returns: ["order", "orderItems", "buyer / recipient", "proceeds / payment / tax", "fulfillment / packages / fulfillmentOrders"],
+    next: "The Result tab shows the order summary/items; All returned data shows every included data group Amazon returned.",
+  },
+  reports: {
+    request: "GET /reports/2021-06-30/reports",
+    delivery: "Immediate JSON response",
+    returns: ["reports[]", "reportId", "reportType", "processingStatus", "reportDocumentId when available", "nextToken"],
+    next: "Open a report status. For another page, Amazon requires nextToken as the only filter parameter.",
+    pagination: "nextToken",
+  },
+  createReport: {
+    request: "POST /reports/2021-06-30/reports",
+    delivery: "Asynchronous job",
+    returns: ["reportId"],
+    next: "Poll Report status until DONE, FATAL, or CANCELLED. DONE should provide reportDocumentId.",
+  },
+  report: {
+    request: "GET /reports/2021-06-30/reports/{reportId}",
+    delivery: "Job status JSON",
+    returns: ["processingStatus", "reportId", "reportType", "timestamps", "marketplaceIds", "reportDocumentId when DONE"],
+    next: "When DONE, open reportDocumentId to retrieve the presigned Amazon document URL and preview.",
+  },
+  reportDocument: {
+    request: "GET /reports/2021-06-30/documents/{reportDocumentId}",
+    delivery: "JSON metadata + presigned document URL",
+    returns: ["reportDocumentId", "url", "compressionAlgorithm", "downloaded content preview", "content type / disposition"],
+    next: "Open/download the original Amazon URL. The workbench also previews up to 2 MB of text.",
+  },
+  feeds: {
+    request: "GET /feeds/2021-06-30/feeds",
+    delivery: "Immediate JSON response",
+    returns: ["feeds[]", "feedId", "feedType", "processingStatus", "resultFeedDocumentId when available", "nextToken"],
+    next: "Open a feed status. For another page, Amazon requires nextToken as the only filter parameter.",
+    pagination: "nextToken",
+  },
+  feed: {
+    request: "GET /feeds/2021-06-30/feeds/{feedId}",
+    delivery: "Job status JSON",
+    returns: ["feedId", "feedType", "marketplaceIds", "processingStatus", "timestamps", "resultFeedDocumentId"],
+    next: "When DONE, inspect resultFeedDocumentId. A DONE feed can still contain record-level errors.",
+  },
+  feedDocument: {
+    request: "GET /feeds/2021-06-30/documents/{feedDocumentId}",
+    delivery: "JSON metadata + presigned processing-report URL",
+    returns: ["feedDocumentId", "url", "compressionAlgorithm", "downloaded processing report preview"],
+    next: "Review record-level processing errors before treating submitted records as successful.",
+  },
+  submitFeed: {
+    request: "POST feed document → PUT content → POST feed",
+    delivery: "Multi-step asynchronous workflow",
+    returns: ["inputFeedDocumentId", "feedId", "upload verification / next step"],
+    next: "Poll Feed status, then open resultFeedDocumentId when processing is DONE.",
+  },
+  inboundPlans: {
+    request: "GET /inbound/fba/2024-03-20/inboundPlans",
+    delivery: "Immediate JSON response",
+    returns: ["inboundPlans[]", "plan IDs / names / status", "sourceAddress", "pagination.nextToken"],
+    next: "Open an inbound plan or continue with pagination.nextToken.",
+    pagination: "pagination.nextToken",
+  },
+  inboundPlan: {
+    request: "GET /inbound/fba/2024-03-20/inboundPlans/{inboundPlanId}",
+    delivery: "Immediate JSON response",
+    returns: ["plan identity/status", "sourceAddress", "packingOptions", "placementOptions", "shipments[]"],
+    next: "Open a returned shipment for destination, tracking, transportation and document actions.",
+  },
+  inboundShipment: {
+    request: "GET /inbound/fba/2024-03-20/inboundPlans/{inboundPlanId}/shipments/{shipmentId}",
+    delivery: "Immediate JSON response",
+    returns: ["shipment status/IDs", "source/destination", "dates", "trackingDetails", "freightInformation", "selected transportation/delivery", "contact/appointments"],
+    next: "Use the shipment ID for labels or bill of lading when Amazon makes those documents available.",
+  },
+  inboundOperationStatus: {
+    request: "GET /inbound/fba/2024-03-20/operations/{operationId}",
+    delivery: "Asynchronous operation status JSON",
+    returns: ["operationId", "operation", "operationStatus", "operationProblems[]"],
+    next: "Continue only after SUCCESS. On FAILED, correct every operationProblem before starting another write.",
+  },
+  prepDetails: {
+    request: "GET /inbound/fba/2024-03-20/items/prepDetails",
+    delivery: "Immediate JSON response",
+    returns: ["mskuPrepDetails[]", "prepCategory", "prepTypes", "prep owner constraints", "label owner constraints"],
+    next: "Use these constraints when building the inbound-plan item payload.",
+  },
+  createInboundPlan: {
+    request: "POST /inbound/fba/2024-03-20/inboundPlans",
+    delivery: "Asynchronous write",
+    returns: ["inboundPlanId", "operationId"],
+    next: "Poll operationId until SUCCESS, then retrieve inboundPlanId.",
+  },
+  itemLabels: {
+    request: "POST /inbound/fba/2024-03-20/items/labels",
+    delivery: "Immediate document metadata",
+    returns: ["documentDownloads[]", "uri", "downloadType", "expiration"],
+    next: "Open/download each returned label URL before it expires.",
+  },
+  shipmentLabels: {
+    request: "GET /fba/inbound/v0/shipments/{shipmentId}/labels",
+    delivery: "Immediate legacy document response",
+    returns: ["payload.DownloadURL", "errors[] when applicable"],
+    next: "Open/download Amazon's generated package/2D/pallet-label document.",
+  },
+  billOfLading: {
+    request: "GET /fba/inbound/v0/shipments/{shipmentId}/billOfLading",
+    delivery: "Immediate legacy document response",
+    returns: ["payload.DownloadURL", "errors[] when applicable"],
+    next: "Open/download Amazon's generated bill of lading.",
+  },
+  legacyConvert: {
+    request: "Private SQL workflow",
+    delivery: "Not an SP-API operation",
+    returns: ["Requires original company database schema and rules"],
+    next: "Connect the legacy database safely before implementing this action.",
+  },
+  legacyFc: {
+    request: "Private SQL workflow",
+    delivery: "Not an SP-API operation",
+    returns: ["Requires SkuType / fulfillment-centre tables and business rules"],
+    next: "Connect the legacy database safely before implementing this action.",
+  },
+};
+
 export function Workbench() {
   const [credentials, setCredentials] = useState(initialCredentials);
   const [environment, setEnvironment] = useState<SpApiEnvironment>("sandbox");
