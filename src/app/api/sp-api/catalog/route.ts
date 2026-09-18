@@ -1,6 +1,6 @@
 import { getMarketplace } from "@/lib/marketplaces";
 import { catalogRequestSchema } from "@/lib/schemas";
-import { callSpApi, getAccessToken, privateHeaders, toErrorResponse } from "@/lib/sp-api";
+import { callSpApi, getAccessToken, privateHeaders, SpApiError, toErrorResponse } from "@/lib/sp-api";
 
 export const dynamic = "force-dynamic";
 
@@ -270,7 +270,12 @@ function normalizeIncludedData(value: string) {
   if (!entries.length) return defaultIncludedData;
   const invalid = splitCsv(value).filter((entry) => !allowedIncludedData.has(entry));
   if (invalid.length) {
-    throw new Error("Unsupported Catalog includedData value: " + invalid.join(", "));
+    throw new SpApiError(
+      "Unsupported Catalog includedData value: " + invalid.join(", "),
+      400,
+      { invalid },
+      "INVALID_CATALOG_INCLUDED_DATA",
+    );
   }
   return entries.join(",");
 }
