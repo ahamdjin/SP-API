@@ -350,6 +350,7 @@ export function Workbench() {
     const pagination = isRecord(result.data.pagination) ? result.data.pagination : {};
     return stringValue(pagination.nextToken);
   }, [result]);
+  const responseWarnings = useMemo(() => extractResponseWarnings(result?.data), [result]);
   const credentialsComplete = Object.values(credentials).every((value) => value.trim().length > 0);
   const activeItem = operationGroups.flatMap((group) => group.items).find((item) => item.id === operation)!;
   const ActiveIcon = activeItem.icon;
@@ -575,6 +576,7 @@ export function Workbench() {
             {!result && !isLoading && <div className="empty-state"><Braces size={24} /><p>Run the selected operation to inspect Amazon&apos;s response.</p></div>}
             {isLoading && <div className="empty-state loading-state"><LoaderCircle className="spin" size={24} /><p>Waiting for Amazon…</p></div>}
             {result && !result.ok && <div className="error-banner"><X size={18} /><div><strong>{result.problem?.code ? "Request failed · " + result.problem.code : "Request failed"}</strong><p>{result.problem?.message ?? result.error ?? extractAmazonError(result.data)}</p>{result.problem?.details && <p><strong>Details:</strong> {result.problem.details}</p>}{result.problem?.action && <p><strong>What to do:</strong> {result.problem.action}</p>}{result.problem && <p><strong>Automatic retry:</strong> {result.problem.retryable ? "Safe with backoff." : "Not recommended until the cause/state is verified."}</p>}{result.requestId && <p><strong>Amazon request ID:</strong> <code>{result.requestId}</code></p>}{!result.requestId && result.gatewayId && <p><strong>Amazon gateway ID:</strong> <code>{result.gatewayId}</code></p>}</div></div>}
+            {result?.ok && responseWarnings.length > 0 && <div className="warning-stack">{responseWarnings.map((warning, index) => <div className="warning-banner" key={warning.code + "-" + index}><FileSearch size={17} /><div><strong>{warning.code}</strong><p>{warning.message}</p>{warning.details && <p>{warning.details}</p>}</div></div>)}</div>}
             {result?.ok && operation === "catalog" && <div className="catalog-results">
               {catalogFamily && <><div className={"family-summary " + (catalogFamily.complete ? "complete" : "partial")}><strong>{catalogFamily.returnedCount} of {catalogFamily.requestedCount} related records returned</strong><span>{catalogFamily.complete ? "Complete variation and package relationship graph" : "Partial related set — one or more related-ASIN calls failed"}</span></div>{catalogFamily.warnings.map((warning, index) => <div className="error-banner" key={warning.code + "-" + index}><X size={18} /><div><strong>Related product lookup · {warning.code}</strong><p>{warning.message}</p><p><strong>What to do:</strong> {warning.action}</p>{warning.requestId && <p><strong>Amazon request ID:</strong> <code>{warning.requestId}</code></p>}</div></div>)}</>}
               {catalogItems.length === 0 ? <p className="no-results">Amazon returned no catalogue items.</p> : <CatalogProductView key={catalogItems.map((item) => item.asin).join("|")} items={catalogItems} />}
@@ -1080,9 +1082,18 @@ function OperationResult({
   if (operation === "inboundPlan") {
     const inboundPlanId = stringValue(data.inboundPlanId) || stringFieldValue(fields, "inboundPlanId");
     const shipments = arrayRecords(data.shipments);
+    const sourceAddress = isRecord(data.sourceAddress) ? data.sourceAddress : {};
+    const packingOptions = arrayRecords(data.packingOptions);
+    const placementOptions = arrayRecords(data.placementOptions);
     return <div className="workflow-results">
       <StatusHero label={stringValue(data.name) || "Inbound plan"} status={stringValue(data.status) || "UNKNOWN"} id={inboundPlanId} />
-      <ResultDetails rows={rowsFrom(data, ["createdAt", "lastUpdatedAt", "marketplaceIds"])} />
+      <ResultDetails rows={[
+        ...rowsFrom(data, ["createdAt", "lastUpdatedAt", "marketplaceIds"]),
+        { label: "Ship from", value: addressSummary(sourceAddress) || "Not returned" },
+        { label: "Packing options", value: String(packingOptions.length) },
+        { label: "Placement options", value: String(placementOptions.length) },
+        { label: "Shipments", value: String(shipments.length) },
+      ]} />
       {shipments.length > 0 && <RecordList records={shipments} idKey="shipmentId" titleKey="name" statusKey="status" onOpen={(record) => {
         const shipmentId = stringValue(record.shipmentId);
         if (shipmentId && inboundPlanId) onFollow("inboundShipment", { inboundPlanId, shipmentId });
@@ -1094,9 +1105,17 @@ function OperationResult({
   if (operation === "inboundShipment") {
     const inboundPlanId = stringValue(data.inboundPlanId) || stringFieldValue(fields, "inboundPlanId");
     const shipmentId = stringValue(data.shipmentId) || stringFieldValue(fields, "shipmentId");
+    const source = isRecord(data.source) ? data.source : {};
+    const destination = isRecord(data.destination) ? data.destination : {};
+    const sourceAddress = isRecord(source.address) ? source.address : {};
+    const destinationAddress = isRecord(destination.address) ? destination.address : {};
     return <div className="workflow-results">
       <StatusHero label={stringValue(data.name) || "Inbound shipment"} status={stringValue(data.status) || "RETURNED"} id={shipmentId} />
-      <ResultDetails rows={topLevelRows(data)} />
+      <ResultDetails rows={[
+        ...rowsFrom(data, ["shipmentConfirmationId", "amazonReferenceId", "placementOptionId", "selectedTransportationOptionId"]),
+        { label: "Source", value: addressSummary(sourceAddress) || stringValue(source.sourceType) || "Not returned" },
+        { label: "Destination", value: [stringValue(destination.warehouseId), addressSummary(destinationAddress)].filter(Boolean).join(" · ") || "Not returned" },
+      ]} />
       {shipmentId && <ActionRow>
         <button className="workflow-action primary" type="button" onClick={() => onFollow("shipmentLabels", { shipmentId })}><Download size={15} /> Get shipment labels</button>
         <button className="workflow-action" type="button" onClick={() => onFollow("billOfLading", { shipmentId })}><FileSearch size={15} /> Get bill of lading</button>
@@ -1159,7 +1178,7 @@ function OperationResult({
     const items = prep.length ? prep : arrayRecords(data.items);
     return <div className="workflow-results">
       <SuccessLead title={String(items.length) + " prep record" + (items.length === 1 ? "" : "s") + " returned"} copy="Prep instructions returned by Amazon." />
-      <CompactTable records={items} preferredKeys={["msku", "asin", "fnsku", "prepCategory", "prepTypes"]} />
+      <CompactTable records={items} preferredKeys={["msku", "prepCategory", "prepTypes", "prepOwnerConstraint", "labelOwnerConstraint", "allOwnersConstraint"]} maxColumns={6} />
       {items.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
@@ -1168,10 +1187,23 @@ function OperationResult({
     const order = isRecord(data.order) ? data.order : data;
     const orderId = stringValue(order.orderId) || stringFieldValue(fields, "orderId");
     const fulfillment = isRecord(order.fulfillment) ? order.fulfillment : {};
+    const salesChannel = isRecord(order.salesChannel) ? order.salesChannel : {};
+    const buyer = isRecord(order.buyer) ? order.buyer : {};
+    const recipient = isRecord(order.recipient) ? order.recipient : {};
+    const deliveryAddress = isRecord(recipient.deliveryAddress) ? recipient.deliveryAddress : {};
+    const proceeds = isRecord(order.proceeds) ? order.proceeds : {};
+    const grandTotal = isRecord(proceeds.grandTotal) ? proceeds.grandTotal : {};
     const items = arrayRecords(order.orderItems);
     return <div className="workflow-results">
       <StatusHero label="Amazon order" status={stringValue(fulfillment.fulfillmentStatus) || "RETURNED"} id={orderId} />
-      <ResultDetails rows={topLevelRows(order)} />
+      <ResultDetails rows={[
+        ...rowsFrom(order, ["createdTime", "lastUpdatedTime"]),
+        { label: "Marketplace", value: [stringValue(salesChannel.marketplaceName), stringValue(salesChannel.marketplaceId)].filter(Boolean).join(" · ") || "Not returned" },
+        { label: "Buyer", value: stringValue(buyer.buyerName) || stringValue(buyer.buyerEmail) || "Not returned / not authorized" },
+        { label: "Deliver to", value: addressSummary(deliveryAddress) || "Not returned / not authorized" },
+        { label: "Order total", value: moneySummary(grandTotal) || "Not returned" },
+        { label: "Fulfilled by", value: [stringValue(fulfillment.fulfilledBy), stringValue(fulfillment.fulfillmentServiceLevel)].filter(Boolean).join(" · ") || "Not returned" },
+      ]} />
       {items.length > 0 && <CompactTable records={items.map((item) => {
         const product = isRecord(item.product) ? item.product : {};
         return { orderItemId: item.orderItemId, quantityOrdered: item.quantityOrdered, asin: product.asin, sellerSku: product.sellerSku, title: product.title };
@@ -1379,6 +1411,39 @@ function displayValue(value: unknown): string {
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   if (Array.isArray(value) && value.every((item) => ["string", "number", "boolean"].includes(typeof item))) return value.join(", ");
   return "";
+}
+
+
+type ResponseWarning = { code: string; message: string; details: string };
+
+function extractResponseWarnings(value: unknown): ResponseWarning[] {
+  if (!isRecord(value)) return [];
+  const candidates: unknown[] = [];
+  if (Array.isArray(value.businessWarnings)) candidates.push(...value.businessWarnings);
+  if (Array.isArray(value.errors)) candidates.push(...value.errors);
+  return candidates.filter(isRecord).map((warning, index) => ({
+    code: stringValue(warning.code) || stringValue(warning.severity) || "AMAZON_WARNING_" + String(index + 1),
+    message: stringValue(warning.message) || "Amazon returned an additional warning.",
+    details: stringValue(warning.details),
+  }));
+}
+
+function addressSummary(value: Record<string, unknown>) {
+  return [
+    stringValue(value.name),
+    stringValue(value.addressLine1),
+    stringValue(value.addressLine2),
+    stringValue(value.city),
+    stringValue(value.stateOrProvinceCode) || stringValue(value.stateOrRegion),
+    stringValue(value.postalCode),
+    stringValue(value.countryCode),
+  ].filter(Boolean).join(", ");
+}
+
+function moneySummary(value: Record<string, unknown>) {
+  const amount = stringValue(value.amount) || (typeof value.amount === "number" ? String(value.amount) : "");
+  const currency = stringValue(value.currencyCode) || stringValue(value.CurrencyCode);
+  return [currency, amount].filter(Boolean).join(" ");
 }
 
 function stringFieldValue(fields: Record<string, FieldValue>, key: string) {
