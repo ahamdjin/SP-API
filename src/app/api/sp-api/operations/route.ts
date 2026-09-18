@@ -289,41 +289,17 @@ function call(input: Input, path: string, method: "GET" | "POST" = "GET", body?:
 }
 
 async function submitFeed(input: Input, fields: Fields) {
-  if (input.environment === "sandbox") {
-    const document = await call(input, "/feeds/2021-06-30/documents", "POST", {
-      contentType: "text/tab-separated-values; charset=UTF-8",
-    });
-    if (!document.ok) return document;
-
-    const documentData = record(document.data);
-    const feedDocumentId = typeof documentData.feedDocumentId === "string"
-      ? documentData.feedDocumentId
-      : "3d4e42b5-1d6e-44e8-a89c-2abfca0625bb";
-
-    const created = await call(input, "/feeds/2021-06-30/feeds", "POST", {
-      feedType: "POST_PRODUCT_DATA",
-      marketplaceIds: ["ATVPDKIKX0DER", "A1F83G8C2ARO7P"],
-      inputFeedDocumentId: feedDocumentId,
-    });
-
-    if (!created.ok) return created;
-    return {
-      ...created,
-      data: {
-        ...record(created.data),
-        inputFeedDocumentId: feedDocumentId,
-        sandboxFixture: true,
-        nextStep: "Amazon static Sandbox returns feedId 3485934 for createFeed, but getFeed uses a separate feedId1 fixture. Use the workbench's Check feed status action; it switches to the correct status fixture automatically.",
-      },
-    };
-  }
-
   const feedType = stringField(fields, "feedType");
   const contentType = optionalString(fields, "contentType") || "application/json; charset=UTF-8";
   const content = stringField(fields, "content");
+  const marketplaceIds = csvValues(optionalString(fields, "feedMarketplaceIds"), 10);
 
   if (feedType === "JSON_LISTINGS_FEED") {
     validateJsonListingsFeed(contentType, content);
+  }
+
+  if (Buffer.byteLength(content, "utf8") > 5 * 1024 * 1024) {
+    throw new SpApiError("Feed content is limited to 5 MB in this workbench", 413, null, "FEED_TOO_LARGE");
   }
 
   const document = await call(input, "/feeds/2021-06-30/documents", "POST", { contentType });
@@ -336,30 +312,28 @@ async function submitFeed(input: Input, fields: Fields) {
     throw new SpApiError("Amazon did not return a feed upload URL and document ID", 502, document.data, "FEED_UPLOAD_URL_MISSING");
   }
 
-  if (Buffer.byteLength(content, "utf8") > 5 * 1024 * 1024) {
-    throw new SpApiError("Feed content is limited to 5 MB in this workbench", 413, null, "FEED_TOO_LARGE");
-  }
-
-  const uploadUrl = safeAmazonDocumentUrl(url, "feed upload");
-  const upload = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "content-type": contentType },
-    body: content,
-    cache: "no-store",
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!upload.ok) {
-    throw new SpApiError(
-      `Amazon feed document upload failed with HTTP ${upload.status}`,
-      upload.status,
-      { statusText: upload.statusText },
-      "FEED_DOCUMENT_UPLOAD_FAILED",
-    );
+  if (input.environment === "production") {
+    const uploadUrl = safeAmazonDocumentUrl(url, "feed upload");
+    const upload = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "content-type": contentType },
+      body: content,
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!upload.ok) {
+      throw new SpApiError(
+        `Amazon feed document upload failed with HTTP ${upload.status}`,
+        upload.status,
+        { statusText: upload.statusText },
+        "FEED_DOCUMENT_UPLOAD_FAILED",
+      );
+    }
   }
 
   const created = await call(input, "/feeds/2021-06-30/feeds", "POST", {
     feedType,
-    marketplaceIds: [input.marketplaceId],
+    marketplaceIds: marketplaceIds.length ? marketplaceIds : [input.marketplaceId],
     inputFeedDocumentId: feedDocumentId,
   });
 
@@ -369,7 +343,9 @@ async function submitFeed(input: Input, fields: Fields) {
     data: {
       ...record(created.data),
       inputFeedDocumentId: feedDocumentId,
-      verification: "Poll Feed status until DONE or FATAL. When DONE, use resultFeedDocumentId with Feed processing report to inspect record-level errors.",
+      verification: input.environment === "sandbox"
+        ? "Static Sandbox validates Amazon's predefined create-document/create-feed request examples. It does not persist the uploaded content like Production."
+        : "Poll Feed status until DONE or FATAL. When DONE, use resultFeedDocumentId with Feed processing report to inspect record-level errors.",
     },
   };
 }
@@ -537,17 +513,6 @@ function applyBusinessOutcome(input: Input, result: CallResult): CallResult {
 
   if (operation === "feed") {
     const processingStatus = typeof data.processingStatus === "string" ? data.processingStatus : "";
-
-    if (input.environment === "sandbox" && processingStatus === "CANCELLED") {
-      return {
-        ...result,
-        data: {
-          ...data,
-          sandboxFixture: true,
-          nextStep: "Amazon's static getFeed fixture intentionally returns CANCELLED. This validates status handling; use Feed processing report to open the separate sandbox document fixture.",
-        },
-      };
-    }
 
     if (processingStatus === "FATAL" || processingStatus === "CANCELLED") {
       return {
@@ -767,18 +732,26 @@ function numberField(fields: Fields, key: string, min: number, max: number, fall
   return value;
 }
 
-function optionalIntegerField(fields: Fields, key: string, min: number) {
+function optionalIntegerField(fields: Fields, key: string, min: number, max?: number) {
   const raw = optionalString(fields, key);
   if (!raw) return "";
   const value = Number(raw);
-  if (!Number.isInteger(value) || value < min) {
-    throw new SpApiError(key + " must be an integer of at least " + min, 400, null, "INVALID_NUMBER");
+  if (!Number.isInteger(value) || value < min || (max !== undefined && value > max)) {
+    const range = max === undefined ? "at least " + min : "between " + min + " and " + max;
+    throw new SpApiError(key + " must be an integer " + range, 400, null, "INVALID_NUMBER");
   }
   return String(value);
 }
 
 function addOptional(params: URLSearchParams, key: string, value: string) {
   if (value) params.set(key, value);
+}
+
+function csvValues(value: string, max: number) {
+  if (!value) return [];
+  const values = value.split(/[\n,]/).map((entry) => entry.trim()).filter(Boolean);
+  if (values.length > max) throw new SpApiError("At most " + max + " values are allowed", 400, null, "TOO_MANY_VALUES");
+  return values;
 }
 
 function addCsv(params: URLSearchParams, key: string, value: string, max: number, repeated = false) {
@@ -820,10 +793,10 @@ function requireConfirmation(fields: Fields) {
 
 function parseItems(value: string, max = 2000) {
   const items = value.split(/\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
-    const [msku, quantityRaw, prepOwner = "SELLER", labelOwner = "SELLER"] = line.split(",").map((part) => part.trim());
+    const [msku, quantityRaw, prepOwner = "SELLER", labelOwner = "SELLER", expiration = "", manufacturingLotCode = ""] = line.split(",").map((part) => part.trim());
     const quantity = Number(quantityRaw);
     if (!msku || !Number.isInteger(quantity) || quantity < 1 || quantity > 500000) {
-      throw new SpApiError("Each item must use: MSKU, quantity, prep owner, label owner", 400, null, "INVALID_ITEM_ROW");
+      throw new SpApiError("Each item must use: MSKU, quantity, prep owner, label owner[, expiration, manufacturing lot code]", 400, null, "INVALID_ITEM_ROW");
     }
     if (!["AMAZON", "SELLER", "NONE"].includes(prepOwner)) {
       throw new SpApiError("Prep owner must be AMAZON, SELLER, or NONE", 400, null, "INVALID_PREP_OWNER");
@@ -831,7 +804,14 @@ function parseItems(value: string, max = 2000) {
     if (!["AMAZON", "SELLER", "NONE"].includes(labelOwner)) {
       throw new SpApiError("Label owner must be AMAZON, SELLER, or NONE", 400, null, "INVALID_LABEL_OWNER");
     }
-    return { msku, quantity, prepOwner, labelOwner };
+    return {
+      msku,
+      quantity,
+      prepOwner,
+      labelOwner,
+      ...(expiration ? { expiration } : {}),
+      ...(manufacturingLotCode ? { manufacturingLotCode } : {}),
+    };
   });
   if (items.length === 0) throw new SpApiError("Add at least one item", 400, null, "NO_ITEMS");
   if (items.length > max) throw new SpApiError("This operation accepts at most " + max + " items", 400, null, "TOO_MANY_ITEMS");
