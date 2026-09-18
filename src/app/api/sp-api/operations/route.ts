@@ -111,7 +111,7 @@ export async function POST(request: Request) {
             });
 
         if (!nextToken) {
-          addCsv(params, "reportTypes", stringField(fields, "reportTypes"), 10);
+          addCsv(params, "reportTypes", optionalString(fields, "reportTypes"), 10);
           addCsv(params, "processingStatuses", optionalString(fields, "processingStatuses"), 5);
           addOptional(params, "createdSince", optionalDate(fields, "createdSince"));
           addOptional(params, "createdUntil", optionalDate(fields, "createdUntil"));
@@ -181,7 +181,7 @@ export async function POST(request: Request) {
             });
 
         if (!nextToken) {
-          addCsv(params, "feedTypes", stringField(fields, "feedTypes"), 10);
+          addCsv(params, "feedTypes", optionalString(fields, "feedTypes"), 10);
           addCsv(params, "processingStatuses", optionalString(fields, "processingStatuses"), 5);
           addOptional(params, "createdSince", optionalDate(fields, "createdSince"));
           addOptional(params, "createdUntil", optionalDate(fields, "createdUntil"));
