@@ -68,11 +68,10 @@ export async function POST(request: Request) {
 
       case "reports": {
         if (input.environment === "sandbox") {
-          const params = new URLSearchParams();
-          params.append("reportTypes", "FEE_DISCOUNTS_REPORT");
-          params.append("reportTypes", "GET_AFN_INVENTORY_DATA");
-          params.append("processingStatuses", "IN_QUEUE");
-          params.append("processingStatuses", "IN_PROGRESS");
+          const params = new URLSearchParams({
+            reportTypes: "FEE_DISCOUNTS_REPORT,GET_AFN_INVENTORY_DATA",
+            processingStatuses: "IN_QUEUE,IN_PROGRESS",
+          });
           result = await call(input, "/reports/2021-06-30/reports?" + params);
           break;
         }
