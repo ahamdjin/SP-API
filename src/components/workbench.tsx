@@ -763,6 +763,7 @@ function OperationResult({
       <ActionRow>
         {(status === "IN_QUEUE" || status === "IN_PROGRESS") && feedId && <button className="workflow-action primary" type="button" onClick={() => onFollow("feed", { feedId })}><RefreshCw size={15} /> Check again</button>}
         {documentId && <button className="workflow-action primary" type="button" onClick={() => onFollow("feedDocument", { feedDocumentId: documentId })}><FileSearch size={15} /> Open processing report</button>}
+        {environment === "sandbox" && !documentId && <button className="workflow-action" type="button" onClick={() => onFollow("feedDocument", { feedDocumentId: "0356cf79-b8b0-4226-b4b9-0ee058ea5760" })}><FileSearch size={15} /> Open sandbox processing report</button>}
       </ActionRow>
       {nextStep && <WorkflowNote>{nextStep}</WorkflowNote>}
     </div>;
@@ -803,6 +804,7 @@ function OperationResult({
       <ActionRow>
         {status === "IN_PROGRESS" && operationId && <button className="workflow-action primary" type="button" onClick={() => onFollow("inboundOperationStatus", { operationId })}><RefreshCw size={15} /> Check again</button>}
         {status === "SUCCESS" && stringFieldValue(fields, "inboundPlanId") && <button className="workflow-action primary" type="button" onClick={() => onFollow("inboundPlan", { inboundPlanId: stringFieldValue(fields, "inboundPlanId") })}><ArrowRight size={15} /> Open inbound plan</button>}
+        {status === "SUCCESS" && environment === "sandbox" && !stringFieldValue(fields, "inboundPlanId") && <button className="workflow-action" type="button" onClick={() => onFollow("inboundPlan", { inboundPlanId: "wf1234abcd-1234-abcd-5678-1234abcd5678" })}><ArrowRight size={15} /> Open sandbox plan fixture</button>}
       </ActionRow>
       {nextStep && <WorkflowNote>{nextStep}</WorkflowNote>}
     </div>;
@@ -830,6 +832,21 @@ function OperationResult({
         const shipmentId = stringValue(record.shipmentId);
         if (shipmentId && inboundPlanId) onFollow("inboundShipment", { inboundPlanId, shipmentId });
       }} actionLabel="Open shipment" />}
+      {environment === "sandbox" && shipments.length === 0 && <ActionRow><button className="workflow-action" type="button" onClick={() => onFollow("inboundShipment", { inboundPlanId: "wf1234abcd-1234-abcd-5678-1234abcd5678", shipmentId: "sh1234abcd-1234-abcd-5678-1234abcd5678" })}><ArrowRight size={15} /> Open sandbox shipment fixture</button></ActionRow>}
+    </div>;
+  }
+
+  if (operation === "inboundShipment") {
+    const inboundPlanId = stringValue(data.inboundPlanId) || stringFieldValue(fields, "inboundPlanId");
+    const shipmentId = stringValue(data.shipmentId) || stringFieldValue(fields, "shipmentId");
+    return <div className="workflow-results">
+      <StatusHero label={stringValue(data.name) || "Inbound shipment"} status={stringValue(data.status) || "RETURNED"} id={shipmentId} />
+      <ResultDetails rows={topLevelRows(data)} />
+      {shipmentId && <ActionRow>
+        <button className="workflow-action primary" type="button" onClick={() => onFollow("shipmentLabels", { shipmentId })}><Download size={15} /> Get shipment labels</button>
+        <button className="workflow-action" type="button" onClick={() => onFollow("billOfLading", { shipmentId })}><FileSearch size={15} /> Get bill of lading</button>
+        {inboundPlanId && <button className="workflow-action" type="button" onClick={() => onFollow("inboundPlan", { inboundPlanId })}><ArrowRight size={15} /> Back to plan</button>}
+      </ActionRow>}
     </div>;
   }
 
@@ -864,9 +881,9 @@ function OperationResult({
     </div>;
   }
 
-  if (operation === "order" || operation === "inboundShipment") {
+  if (operation === "order") {
     return <div className="workflow-results">
-      <SuccessLead title={operation === "order" ? "Order returned" : "Shipment returned"} copy={nextStep || "Amazon returned the requested resource."} />
+      <SuccessLead title="Order returned" copy={nextStep || "Amazon returned the requested order."} />
       <ResultDetails rows={genericRows} />
     </div>;
   }
