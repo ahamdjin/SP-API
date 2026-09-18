@@ -908,6 +908,7 @@ type DocumentView = {
   content: string;
   bytesRead: number | null;
   truncated: boolean;
+  error: string;
 };
 
 function DocumentResults({ documents, environment }: { documents: DocumentView[]; environment: SpApiEnvironment }) {
@@ -918,6 +919,7 @@ function DocumentResults({ documents, environment }: { documents: DocumentView[]
       <div className="document-card-heading"><div><span>{"Document " + String(index + 1)}</span><strong>{document.label}</strong></div>{document.contentType && <code>{document.contentType}</code>}</div>
       <div className="document-meta">{document.bytesRead !== null && <span>{new Intl.NumberFormat().format(document.bytesRead)} bytes read</span>}{document.truncated && <span>Preview truncated</span>}{environment === "sandbox" && !document.content && <span>Static sandbox may return a mock URL rather than a real file.</span>}</div>
       {href ? <a className="workflow-action primary document-download" href={href} target="_blank" rel="noreferrer"><Download size={15} /> Open / download original <ExternalLink size={13} /></a> : <p className="document-unavailable">Amazon returned a non-HTTPS or placeholder document URL, so the workbench will not open it.</p>}
+      {document.error && <p className="document-unavailable">{document.error}</p>}
       {document.content && <pre className="document-preview"><code>{document.content}</code></pre>}
     </article>;
   })}</div>;
@@ -935,6 +937,7 @@ function extractDocuments(data: Record<string, unknown>): DocumentView[] {
       content: stringValue(downloaded.content),
       bytesRead: numberValue(downloaded.bytesRead),
       truncated: downloaded.truncated === true,
+      error: stringValue(downloaded.error),
     });
   }
 
@@ -949,6 +952,7 @@ function extractDocuments(data: Record<string, unknown>): DocumentView[] {
         content: "",
         bytesRead: null,
         truncated: false,
+        error: "",
       });
     });
   }
@@ -963,6 +967,7 @@ function extractDocuments(data: Record<string, unknown>): DocumentView[] {
       content: "",
       bytesRead: null,
       truncated: false,
+      error: "",
     });
   }
   return output;
