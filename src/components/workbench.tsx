@@ -326,6 +326,7 @@ export function Workbench() {
             {activeItem.kind !== "legacy" && <RequirementLegend />}
 
             <OperationFields
+              environment={environment}
               operation={operation}
               fields={fields}
               updateField={updateField}
@@ -403,8 +404,9 @@ type CatalogState = {
 type FeesState = { idType: "ASIN" | "SKU"; identifier: string; price: string; shipping: string; isAmazonFulfilled: boolean };
 
 function OperationFields({
-  operation, fields, updateField, catalog, setCatalog, fees, setFees, currency,
+  environment, operation, fields, updateField, catalog, setCatalog, fees, setFees, currency,
 }: {
+  environment: SpApiEnvironment;
   operation: Operation;
   fields: Record<string, FieldValue>;
   updateField: (key: string, value: FieldValue) => void;
@@ -454,16 +456,20 @@ function OperationFields({
       content = text("orderId", "Amazon order ID", "114-1234567-1234567", true);
       break;
     case "reports":
-      content = <>{text("reportTypes", "Report type(s)", "GET_FLAT_FILE_OPEN_LISTINGS_DATA", true)}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("reportNextToken", "Next-page token", "Optional · from the previous response")}</>;
+      content = environment === "sandbox"
+        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox uses Amazon&apos;s fixed list-reports fixture: FEE_DISCOUNTS_REPORT + GET_AFN_INVENTORY_DATA with IN_QUEUE + IN_PROGRESS. The workbench sends those exact parameters automatically.</span></div>
+        : <>{text("reportTypes", "Report type(s)", "GET_FLAT_FILE_OPEN_LISTINGS_DATA", true)}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("reportNextToken", "Next-page token", "Optional · from the previous response")}</>;
       break;
     case "createReport":
-      content = <>{text("reportType", "Report type", "GET_FLAT_FILE_OPEN_LISTINGS_DATA", true)}{date("dataStartTime", "Data start")}{date("dataEndTime", "Data end")}<Confirmation fields={fields} updateField={updateField} label="I understand this starts a report job in Amazon." /></>;
+      content = environment === "sandbox"
+        ? <><div className="dataset-note"><Check size={15} /><span>Static Sandbox uses Amazon&apos;s official create-report fixture automatically: GET_MERCHANT_LISTINGS_ALL_DATA, start 2024-03-10T20:11:24.000Z, marketplaces Germany + US. A successful response returns report ID ID323.</span></div><Confirmation fields={fields} updateField={updateField} label="I understand this sends Amazon&apos;s fixed Sandbox report request." /></>
+        : <>{text("reportType", "Report type", "GET_FLAT_FILE_OPEN_LISTINGS_DATA", true)}{date("dataStartTime", "Data start")}{date("dataEndTime", "Data end")}<Confirmation fields={fields} updateField={updateField} label="I understand this starts a report job in Amazon." /></>;
       break;
     case "report":
-      content = text("reportId", "Report ID", "51665019712", true);
+      content = <>{text("reportId", "Report ID", environment === "sandbox" ? "ID323" : "51665019712", true)}{environment === "sandbox" && <div className="dataset-note"><Check size={15} /><span>Use ID323 in Static Sandbox. Amazon&apos;s fixture returns an IN_PROGRESS example report.</span></div>}</>;
       break;
     case "reportDocument":
-      content = text("reportDocumentId", "Report document ID", "amzn1.spdoc...", true);
+      content = <>{text("reportDocumentId", "Report document ID", environment === "sandbox" ? "0356cf79-b8b0-4226-b4b9-0ee058ea5760" : "amzn1.spdoc...", true)}{environment === "sandbox" && <div className="dataset-note"><Check size={15} /><span>The document fixture is independent of ID323. Use 0356cf79-b8b0-4226-b4b9-0ee058ea5760 to test document retrieval.</span></div>}</>;
       break;
     case "feeds":
       content = <>{text("feedTypes", "Feed type(s)", "JSON_LISTINGS_FEED", true)}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("feedNextToken", "Next-page token", "Optional · from the previous response")}</>;
