@@ -4,7 +4,7 @@ import { callSpApi, getAccessToken, privateHeaders, toErrorResponse } from "@/li
 
 export const dynamic = "force-dynamic";
 
-const includedData = [
+const defaultIncludedData = [
   "attributes",
   "classifications",
   "dimensions",
@@ -17,7 +17,8 @@ const includedData = [
   "vendorDetails",
 ].join(",");
 
-const sandboxCatalogIncludedData = [
+const allowedIncludedData = new Set([
+  "attributes",
   "classifications",
   "dimensions",
   "identifiers",
@@ -27,7 +28,7 @@ const sandboxCatalogIncludedData = [
   "salesRanks",
   "summaries",
   "vendorDetails",
-].join(",");
+]);
 
 export async function POST(request: Request) {
   try {
@@ -38,54 +39,8 @@ export async function POST(request: Request) {
     const identifiers = splitCsv(input.query).slice(0, 20).map((identifier) => input.identifierType === "ASIN" ? identifier.toUpperCase() : identifier);
     const { accessToken } = await getAccessToken(input);
 
-    if (input.environment === "sandbox") {
-      const sandboxMarketplaceId = "ATVPDKIKX0DER";
+    const requestedIncludedData = normalizeIncludedData(input.includedData);
 
-      if (input.mode === "keywords") {
-        const params = new URLSearchParams({
-          keywords: "samsung,tv",
-          marketplaceIds: sandboxMarketplaceId,
-          includedData: sandboxCatalogIncludedData,
-        });
-        const result = await callSpApi({
-          credentials: input,
-          marketplaceId: sandboxMarketplaceId,
-          path: `/catalog/2022-04-01/items?${params.toString()}`,
-          accessToken,
-          environment: input.environment,
-        });
-        return Response.json(result, { status: result.ok ? 200 : result.status, headers: privateHeaders });
-      }
-
-      const sandboxAsin = "B07N4M94X4";
-      const params = new URLSearchParams({
-        marketplaceIds: sandboxMarketplaceId,
-        includedData: sandboxCatalogIncludedData,
-      });
-      const result = await callSpApi({
-        credentials: input,
-        marketplaceId: sandboxMarketplaceId,
-        path: `/catalog/2022-04-01/items/${sandboxAsin}?${params.toString()}`,
-        accessToken,
-        environment: input.environment,
-      });
-      if (result.ok) {
-        return Response.json(
-          {
-            ...result,
-            data: {
-              numberOfResults: 1,
-              items: [result.data],
-              sandbox: {
-                note: "Amazon static sandbox Catalog fixture: B07N4M94X4 in the US marketplace.",
-              },
-            },
-          },
-          { status: 200, headers: privateHeaders },
-        );
-      }
-      return Response.json(result, { status: result.status, headers: privateHeaders });
-    }
 
     if (input.mode === "identifier" && input.identifierType === "ASIN" && identifiers.length === 1 && input.includeVariations) {
       const result = await getCompleteRelatedCatalog({
@@ -94,21 +49,48 @@ export async function POST(request: Request) {
         locale: marketplace.locale,
         environment: input.environment,
         requestedAsin: identifiers[0],
+        includedData: requestedIncludedData,
         accessToken,
       });
       return Response.json(result, { status: result.ok ? 200 : result.status, headers: privateHeaders });
     }
 
+    if (input.mode === "identifier" && input.identifierType === "ASIN" && identifiers.length === 1) {
+      const params = new URLSearchParams({
+        marketplaceIds: input.marketplaceId,
+        includedData: requestedIncludedData,
+      });
+      if (input.environment === "production") params.set("locale", marketplace.locale);
+
+      const result = await callSpApi({
+        credentials: input,
+        marketplaceId: input.marketplaceId,
+        path: `/catalog/2022-04-01/items/${encodeURIComponent(identifiers[0])}?${params.toString()}`,
+        accessToken,
+        environment: input.environment,
+      });
+
+      if (result.ok) {
+        return Response.json(
+          { ...result, data: { numberOfResults: 1, items: [result.data] } },
+          { status: 200, headers: privateHeaders },
+        );
+      }
+      return Response.json(result, { status: result.status, headers: privateHeaders });
+    }
+
     const params = new URLSearchParams({
       marketplaceIds: input.marketplaceId,
-      includedData,
-      locale: marketplace.locale,
-      pageSize: String(input.pageSize),
+      includedData: requestedIncludedData,
     });
+    if (input.environment === "production") {
+      params.set("locale", marketplace.locale);
+      params.set("pageSize", String(input.pageSize));
+    }
 
     if (input.mode === "keywords") {
       params.set("keywords", input.query);
-      params.set("keywordsLocale", marketplace.locale);
+      if (input.environment === "production") params.set("keywordsLocale", marketplace.locale);
       addCsv(params, "brandNames", input.brandNames);
       addCsv(params, "classificationIds", input.classificationIds);
       if (input.pageToken) params.set("pageToken", input.pageToken);
@@ -137,6 +119,7 @@ type FamilyInput = {
   marketplaceId: string;
   locale: string;
   requestedAsin: string;
+  includedData: string;
   accessToken: string;
   environment: Parameters<typeof callSpApi>[0]["environment"];
 };
@@ -222,7 +205,8 @@ async function getCompleteRelatedCatalog(input: FamilyInput) {
 }
 
 function getCatalogItem(input: FamilyInput, asin: string) {
-  const params = new URLSearchParams({ marketplaceIds: input.marketplaceId, includedData, locale: input.locale });
+  const params = new URLSearchParams({ marketplaceIds: input.marketplaceId, includedData: input.includedData });
+  if (input.environment === "production") params.set("locale", input.locale);
   return callSpApi({
     credentials: input.credentials,
     marketplaceId: input.marketplaceId,
@@ -237,10 +221,12 @@ function searchCatalogAsins(input: FamilyInput, asins: string[]) {
     identifiers: asins.join(","),
     identifiersType: "ASIN",
     marketplaceIds: input.marketplaceId,
-    includedData,
-    locale: input.locale,
-    pageSize: "20",
+    includedData: input.includedData,
   });
+  if (input.environment === "production") {
+    params.set("locale", input.locale);
+    params.set("pageSize", "20");
+  }
   return callSpApi({
     credentials: input.credentials,
     marketplaceId: input.marketplaceId,
@@ -277,6 +263,16 @@ function chunks<T>(values: T[], size: number) {
   const output: T[][] = [];
   for (let index = 0; index < values.length; index += size) output.push(values.slice(index, index + size));
   return output;
+}
+
+function normalizeIncludedData(value: string) {
+  const entries = splitCsv(value || defaultIncludedData).filter((entry) => allowedIncludedData.has(entry));
+  if (!entries.length) return defaultIncludedData;
+  const invalid = splitCsv(value).filter((entry) => !allowedIncludedData.has(entry));
+  if (invalid.length) {
+    throw new Error("Unsupported Catalog includedData value: " + invalid.join(", "));
+  }
+  return entries.join(",");
 }
 
 function splitCsv(value: string) {
