@@ -19,11 +19,27 @@ const coreOrderData = [
 
 function orderIncludedData(fields: Fields) {
   const override = optionalString(fields, "orderIncludedData");
-  if (override) return csvValues(override, 20).join(",");
+  if (override) {
+    const values = csvValues(override, 11);
+    validateEnumValues("includedData", values, orderIncludedDataValues);
+    return values.join(",");
+  }
   return booleanField(fields, "includeOrderPii")
     ? ["BUYER", "RECIPIENT", coreOrderData].join(",")
     : coreOrderData;
 }
+
+const orderIncludedDataValues = new Set(["BUYER", "RECIPIENT", "PROCEEDS", "EXPENSE", "PROMOTION", "CANCELLATION", "FULFILLMENT", "PACKAGES", "TAX", "PAYMENT", "FULFILLMENT_ORDERS"]);
+const orderStatusValues = new Set(["PENDING_AVAILABILITY", "PENDING", "UNSHIPPED", "PARTIALLY_SHIPPED", "SHIPPED", "CANCELLED", "UNFULFILLABLE"]);
+const fulfilledByValues = new Set(["MERCHANT", "AMAZON"]);
+const processingStatusValues = new Set(["CANCELLED", "DONE", "FATAL", "IN_PROGRESS", "IN_QUEUE"]);
+const inboundPlanStatusValues = new Set(["ACTIVE", "VOIDED", "SHIPPED"]);
+const inboundSortByValues = new Set(["LAST_UPDATED_TIME", "CREATION_TIME"]);
+const sortOrderValues = new Set(["ASC", "DESC"]);
+const itemLabelTypeValues = new Set(["STANDARD_FORMAT", "THERMAL_PRINTING"]);
+const itemLabelPageTypeValues = new Set(["A4_21", "A4_24", "A4_24_64x33", "A4_24_66x35", "A4_24_70x36", "A4_24_70x37", "A4_24i", "A4_27", "A4_40_52x29", "A4_44_48x25", "Letter_30"]);
+const shipmentLabelTypeValues = new Set(["BARCODE_2D", "UNIQUE", "PALLET"]);
+const shipmentPageTypeValues = new Set(["PackageLabel_Letter_2", "PackageLabel_Letter_4", "PackageLabel_Letter_6", "PackageLabel_Letter_6_CarrierLeft", "PackageLabel_A4_2", "PackageLabel_A4_4", "PackageLabel_Plain_Paper", "PackageLabel_Plain_Paper_CarrierBottom", "PackageLabel_Thermal", "PackageLabel_Thermal_Unified", "PackageLabel_Thermal_NonPCP", "PackageLabel_Thermal_No_Carrier_Rotation"]);
 
 const documentPreviewLimit = 2 * 1024 * 1024;
 
@@ -60,8 +76,12 @@ export async function POST(request: Request) {
         });
         addOptional(params, "maxResultsPerPage", optionalIntegerField(fields, "pageSize", 1, 100));
         addOptional(params, "createdBefore", createdBefore);
-        addCsv(params, "fulfillmentStatuses", optionalString(fields, "statuses"), 7);
-        addCsv(params, "fulfilledBy", optionalString(fields, "fulfilledBy"), 2);
+        const statuses = csvValues(optionalString(fields, "statuses"), 7);
+        const fulfilledBy = csvValues(optionalString(fields, "fulfilledBy"), 2);
+        validateEnumValues("fulfillmentStatuses", statuses, orderStatusValues);
+        validateEnumValues("fulfilledBy", fulfilledBy, fulfilledByValues);
+        if (statuses.length) params.set("fulfillmentStatuses", statuses.join(","));
+        if (fulfilledBy.length) params.set("fulfilledBy", fulfilledBy.join(","));
         addOptional(params, "paginationToken", optionalString(fields, "orderPaginationToken"));
         result = await call(input, "/orders/2026-01-01/orders?" + params);
         break;
@@ -80,7 +100,9 @@ export async function POST(request: Request) {
 
         if (!nextToken) {
           addCsv(params, "reportTypes", optionalString(fields, "reportTypes"), 10);
-          addCsv(params, "processingStatuses", optionalString(fields, "processingStatuses"), 5);
+          const processingStatuses = csvValues(optionalString(fields, "processingStatuses"), 5);
+          validateEnumValues("processingStatuses", processingStatuses, processingStatusValues);
+          if (processingStatuses.length) params.set("processingStatuses", processingStatuses.join(","));
           addCsv(params, "marketplaceIds", optionalString(fields, "reportMarketplaceIds"), 10);
           addOptional(params, "pageSize", optionalIntegerField(fields, "pageSize", 1, 100));
           addOptional(params, "createdSince", optionalDate(fields, "createdSince"));
@@ -126,7 +148,9 @@ export async function POST(request: Request) {
 
         if (!nextToken) {
           addCsv(params, "feedTypes", optionalString(fields, "feedTypes"), 10);
-          addCsv(params, "processingStatuses", optionalString(fields, "processingStatuses"), 5);
+          const processingStatuses = csvValues(optionalString(fields, "processingStatuses"), 5);
+          validateEnumValues("processingStatuses", processingStatuses, processingStatusValues);
+          if (processingStatuses.length) params.set("processingStatuses", processingStatuses.join(","));
           addCsv(params, "marketplaceIds", optionalString(fields, "feedMarketplaceIds"), 10);
           addOptional(params, "pageSize", optionalIntegerField(fields, "pageSize", 1, 100));
           addOptional(params, "createdSince", optionalDate(fields, "createdSince"));
@@ -161,9 +185,9 @@ export async function POST(request: Request) {
       case "inboundPlans": {
         const params = new URLSearchParams();
         addOptional(params, "pageSize", optionalIntegerField(fields, "pageSize", 1, 30));
-        addOptional(params, "sortBy", optionalString(fields, "sortBy"));
-        addOptional(params, "sortOrder", optionalString(fields, "sortOrder"));
-        addOptional(params, "status", optionalString(fields, "status"));
+        addOptional(params, "sortBy", optionalEnumString(fields, "sortBy", inboundSortByValues));
+        addOptional(params, "sortOrder", optionalEnumString(fields, "sortOrder", sortOrderValues));
+        addOptional(params, "status", optionalEnumString(fields, "status", inboundPlanStatusValues));
         addOptional(params, "paginationToken", optionalString(fields, "inboundPaginationToken"));
         result = await call(input, "/inbound/fba/2024-03-20/inboundPlans?" + params);
         break;
@@ -231,7 +255,7 @@ export async function POST(request: Request) {
 
       case "itemLabels": {
         const marketplace = getMarketplace(input.marketplaceId);
-        const labelType = optionalString(fields, "labelType") || "STANDARD_FORMAT";
+        const labelType = optionalEnumString(fields, "labelType", itemLabelTypeValues) || "STANDARD_FORMAT";
         const body: Record<string, unknown> = {
           marketplaceId: input.marketplaceId,
           labelType,
@@ -242,7 +266,7 @@ export async function POST(request: Request) {
           body.height = numberField(fields, "labelHeight", 25, 100, 25);
           body.width = numberField(fields, "labelWidth", 25, 100, 100);
         } else {
-          body.pageType = optionalString(fields, "pageType") || "A4_21";
+          body.pageType = optionalEnumString(fields, "pageType", itemLabelPageTypeValues) || "A4_21";
         }
         result = await call(input, "/inbound/fba/2024-03-20/items/labels", "POST", body);
         break;
@@ -250,19 +274,19 @@ export async function POST(request: Request) {
 
       case "shipmentLabels": {
         const shipmentId = stringField(fields, "shipmentId");
-        const labelType = optionalString(fields, "shipmentLabelType") || "UNIQUE";
+        const labelType = optionalEnumString(fields, "shipmentLabelType", shipmentLabelTypeValues) || "UNIQUE";
         const numberOfPallets = optionalIntegerField(fields, "numberOfPallets", 1);
         if (labelType === "PALLET" && !numberOfPallets) {
           throw new SpApiError("numberOfPallets is required for PALLET labels", 400, null, "MISSING_NUMBER_OF_PALLETS");
         }
 
         const params = new URLSearchParams({
-          PageType: optionalString(fields, "shipmentPageType") || "PackageLabel_Thermal_NonPCP",
+          PageType: optionalEnumString(fields, "shipmentPageType", shipmentPageTypeValues) || "PackageLabel_Thermal_NonPCP",
           LabelType: labelType,
         });
         addOptional(params, "NumberOfPackages", optionalIntegerField(fields, "numberOfPackages", 1));
         addOptional(params, "NumberOfPallets", numberOfPallets);
-        addOptional(params, "PageSize", optionalIntegerField(fields, "shipmentPageSize", 1));
+        addOptional(params, "PageSize", optionalIntegerField(fields, "shipmentPageSize", 1, 1000));
         addOptional(params, "PageStartIndex", optionalIntegerField(fields, "pageStartIndex", 0));
         addCsv(params, "PackageLabelsToPrint", optionalString(fields, "packageLabelsToPrint"), 1000);
         result = await call(input, "/fba/inbound/v0/shipments/" + encodeURIComponent(shipmentId) + "/labels?" + params);
@@ -711,6 +735,22 @@ function stringField(fields: Fields, key: string) {
 function optionalString(fields: Fields, key: string) {
   const value = fields[key];
   return typeof value === "string" ? value.trim() : "";
+}
+
+function optionalEnumString(fields: Fields, key: string, allowed: Set<string>) {
+  const value = optionalString(fields, key);
+  if (!value) return "";
+  if (!allowed.has(value)) {
+    throw new SpApiError(key + " has an unsupported value", 400, { value, allowed: [...allowed] }, "INVALID_ENUM_VALUE");
+  }
+  return value;
+}
+
+function validateEnumValues(key: string, values: string[], allowed: Set<string>) {
+  const invalid = values.filter((value) => !allowed.has(value));
+  if (invalid.length) {
+    throw new SpApiError(key + " contains unsupported value(s)", 400, { invalid, allowed: [...allowed] }, "INVALID_ENUM_VALUE");
+  }
 }
 
 function limitedStringField(fields: Fields, key: string, maxLength: number) {
