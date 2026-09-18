@@ -476,51 +476,81 @@ function OperationFields({
         : <>{text("reportType", "Report type", "GET_FLAT_FILE_OPEN_LISTINGS_DATA", true)}{date("dataStartTime", "Data start")}{date("dataEndTime", "Data end")}<Confirmation fields={fields} updateField={updateField} label="I understand this starts a report job in Amazon." /></>;
       break;
     case "report":
-      content = <>{text("reportId", "Report ID", environment === "sandbox" ? "ID323" : "51665019712", true)}{environment === "sandbox" && <div className="dataset-note"><Check size={15} /><span>Use ID323 in Static Sandbox. Amazon&apos;s fixture returns an IN_PROGRESS example report.</span></div>}</>;
+      content = environment === "sandbox"
+        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses report ID <strong>ID323</strong>. Amazon&apos;s fixture returns an IN_PROGRESS example.</span></div>
+        : text("reportId", "Report ID", "51665019712", true);
       break;
     case "reportDocument":
-      content = <>{text("reportDocumentId", "Report document ID", environment === "sandbox" ? "0356cf79-b8b0-4226-b4b9-0ee058ea5760" : "amzn1.spdoc...", true)}{environment === "sandbox" && <div className="dataset-note"><Check size={15} /><span>The document fixture is independent of ID323. Use 0356cf79-b8b0-4226-b4b9-0ee058ea5760 to test document retrieval.</span></div>}</>;
+      content = environment === "sandbox"
+        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses report document <strong>0356cf79-b8b0-4226-b4b9-0ee058ea5760</strong> and attempts to preview the sample file.</span></div>
+        : text("reportDocumentId", "Report document ID", "amzn1.spdoc...", true);
       break;
     case "feeds":
-      content = <>{text("feedTypes", "Feed type(s)", "JSON_LISTINGS_FEED", true)}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("feedNextToken", "Next-page token", "Optional · from the previous response")}</>;
+      content = environment === "sandbox"
+        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s POST_PRODUCT_DATA / CANCELLED,DONE list fixture.</span></div>
+        : <>{text("feedTypes", "Feed type(s)", "JSON_LISTINGS_FEED", true)}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("feedNextToken", "Next-page token", "Optional · from the previous response")}</>;
       break;
     case "feed":
-      content = text("feedId", "Feed ID", "123456789", true);
+      content = environment === "sandbox"
+        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses <strong>feedId1</strong>. Amazon&apos;s fixture intentionally returns CANCELLED.</span></div>
+        : text("feedId", "Feed ID", "123456789", true);
       break;
     case "feedDocument":
-      content = <>{text("feedDocumentId", "Result feed document ID", "Use resultFeedDocumentId returned after the feed is DONE", true)}<div className="dataset-note"><Check size={15} /><span>Downloads a safe 2 MB text preview of Amazon&apos;s processing report so record-level errors are visible.</span></div></>;
+      content = environment === "sandbox"
+        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses document <strong>0356cf79-b8b0-4226-b4b9-0ee058ea5760</strong> and previews the sample processing report.</span></div>
+        : <>{text("feedDocumentId", "Result feed document ID", "Use resultFeedDocumentId returned after the feed is DONE", true)}<div className="dataset-note"><Check size={15} /><span>Downloads a safe 2 MB text preview of Amazon&apos;s processing report so record-level errors are visible.</span></div></>;
       break;
     case "submitFeed":
-      content = <>{text("feedType", "Feed type", "JSON_LISTINGS_FEED", true)}{text("contentType", "Content type", "Defaults to application/json; charset=UTF-8")}{textarea("content", "Feed content", "Paste the complete JSON or tab-delimited feed payload", true)}<Confirmation fields={fields} updateField={updateField} label="I understand this uploads data and starts a feed in Amazon." /></>;
+      content = environment === "sandbox"
+        ? <><div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s official POST_PRODUCT_DATA feed fixture. No real file is uploaded and no production listing is changed.</span></div><Confirmation fields={fields} updateField={updateField} label="I understand this runs Amazon's fixed Sandbox feed example." /></>
+        : <>{text("feedType", "Feed type", "JSON_LISTINGS_FEED", true)}{text("contentType", "Content type", "Defaults to application/json; charset=UTF-8")}{textarea("content", "Feed content", "Paste the complete JSON or tab-delimited feed payload", true)}<Confirmation fields={fields} updateField={updateField} label="I understand this uploads data and starts a feed in Amazon." /></>;
       break;
     case "inboundPlans":
       content = <><Choice label="Plan status" options={["ACTIVE", "SHIPPED", "VOIDED"]} value={value("status")} onChange={(next) => updateField("status", next)} /><Choice label="Sort by" options={["LAST_UPDATED_TIME", "CREATION_TIME"]} value={value("sortBy")} onChange={(next) => updateField("sortBy", next)} /><Choice label="Sort order" options={["DESC", "ASC"]} value={value("sortOrder")} onChange={(next) => updateField("sortOrder", next)} />{text("pageSize", "Results per page", "10")}{text("inboundPaginationToken", "Next-page token", "Optional · from the previous response")}</>;
       break;
     case "inboundPlan":
-      content = text("inboundPlanId", "Inbound plan ID", "wf12345678-...", true);
+      content = environment === "sandbox"
+        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically opens <strong>wf1234abcd-1234-abcd-5678-1234abcd5678</strong>.</span></div>
+        : text("inboundPlanId", "Inbound plan ID", "wf12345678-...", true);
       break;
     case "inboundShipment":
-      content = <>{text("inboundPlanId", "Inbound plan ID", "wf12345678-...", true)}{text("shipmentId", "Shipment ID", "sh12345678-...", true)}</>;
+      content = environment === "sandbox"
+        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically opens Amazon&apos;s sample inbound plan and shipment.</span></div>
+        : <>{text("inboundPlanId", "Inbound plan ID", "wf12345678-...", true)}{text("shipmentId", "Shipment ID", "sh12345678-...", true)}</>;
       break;
     case "inboundOperationStatus":
-      content = <>{text("operationId", "Operation ID", "1234abcd-1234-abcd-5678-1234abcd5678", true)}<div className="dataset-note"><Check size={15} /><span>Use the operationId returned by create/update inbound operations. SUCCESS confirms completion; inspect operationProblems for warnings or failures.</span></div></>;
+      content = environment === "sandbox"
+        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically checks operation <strong>1234abcd-1234-abcd-5678-1234abcd5678</strong>, which returns SUCCESS with a warning example.</span></div>
+        : <>{text("operationId", "Operation ID", "1234abcd-1234-abcd-5678-1234abcd5678", true)}<div className="dataset-note"><Check size={15} /><span>Use the operationId returned by create/update inbound operations. SUCCESS confirms completion; inspect operationProblems for warnings or failures.</span></div></>;
       break;
     case "prepDetails":
-      content = textarea("mskus", "Merchant SKUs", "One MSKU per line", true);
+      content = environment === "sandbox"
+        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically requests prep details for <strong>msku1</strong> and <strong>msku2</strong>.</span></div>
+        : textarea("mskus", "Merchant SKUs", "One MSKU per line", true);
       break;
     case "createInboundPlan":
-      content = <>{text("planName", "Plan name", "September replenishment")}{textarea("items", "Items", "MSKU, quantity, prep owner, label owner", true)}<div className="subsection-label">Ship-from address</div>{text("contactName", "Contact name", "Jane Smith", true)}{text("companyName", "Company")}{text("addressLine1", "Address line 1", "123 Main Street", true)}{text("addressLine2", "Address line 2")}{text("city", "City", "Toronto", true)}{text("stateOrProvinceCode", "State / province", "ON")}{text("postalCode", "Postal code", "M1M 1M1", true)}{text("countryCode", "Country code", "Defaults to marketplace country")}{text("phoneNumber", "Phone number", "+1 555 0100", true)}<Confirmation fields={fields} updateField={updateField} label="I understand this creates an inbound plan in Amazon." /></>;
+      content = environment === "sandbox"
+        ? <><div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically sends Amazon&apos;s official Canada inbound-plan example and returns a sample plan ID + operation ID.</span></div><Confirmation fields={fields} updateField={updateField} label="I understand this runs Amazon's fixed Sandbox inbound-plan example." /></>
+        : <>{text("planName", "Plan name", "September replenishment")}{textarea("items", "Items", "MSKU, quantity, prep owner, label owner", true)}<div className="subsection-label">Ship-from address</div>{text("contactName", "Contact name", "Jane Smith", true)}{text("companyName", "Company")}{text("addressLine1", "Address line 1", "123 Main Street", true)}{text("addressLine2", "Address line 2")}{text("city", "City", "Toronto", true)}{text("stateOrProvinceCode", "State / province", "ON")}{text("postalCode", "Postal code", "M1M 1M1", true)}{text("countryCode", "Country code", "Defaults to marketplace country")}{text("phoneNumber", "Phone number", "+1 555 0100", true)}<Confirmation fields={fields} updateField={updateField} label="I understand this creates an inbound plan in Amazon." /></>;
       break;
     case "itemLabels":
-      content = <>{textarea("items", "Items", "MSKU, quantity", true)}<Choice label="Label format" required options={["STANDARD_FORMAT", "THERMAL_PRINTING"]} value={value("labelType")} onChange={(next) => updateField("labelType", next)} /><Choice label="Page type" options={["A4_21", "A4_24", "A4_24_64x33", "A4_24_66x35", "A4_24_70x36", "A4_24_70x37", "A4_24i", "A4_27", "A4_40_52x29", "A4_44_48x25", "Letter_30"]} value={value("pageType")} onChange={(next) => updateField("pageType", next)} /></>;
+      content = environment === "sandbox"
+        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s msku1/msku2 STANDARD_FORMAT A4_21 label fixture. The returned URL is a mock and may not contain a real printable file.</span></div>
+        : <>{textarea("items", "Items", "MSKU, quantity", true)}<Choice label="Label format" required options={["STANDARD_FORMAT", "THERMAL_PRINTING"]} value={value("labelType")} onChange={(next) => updateField("labelType", next)} /><Choice label="Page type" options={["A4_21", "A4_24", "A4_24_64x33", "A4_24_66x35", "A4_24_70x36", "A4_24_70x37", "A4_24i", "A4_27", "A4_40_52x29", "A4_44_48x25", "Letter_30"]} value={value("pageType")} onChange={(next) => updateField("pageType", next)} /></>;
       break;
     case "shipmentLabels": {
+      if (environment === "sandbox") {
+        content = <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses shipment <strong>348975493</strong>, PackageLabel_Letter_2 and BARCODE_2D. Amazon returns a placeholder label URL rather than a real PDF.</span></div>;
+        break;
+      }
       const palletLabels = value("shipmentLabelType") === "PALLET";
       content = <>{text("shipmentId", "Shipment ID", "FBA123456789", true)}<Choice label="Label type" required options={["UNIQUE", "BARCODE_2D", "PALLET"]} value={value("shipmentLabelType")} onChange={(next) => updateField("shipmentLabelType", next)} />{text("shipmentPageType", "Page type", "Defaults to PackageLabel_Thermal_NonPCP")}{text("numberOfPackages", "Number of packages")}{text("numberOfPallets", "Number of pallets", "", palletLabels, palletLabels ? "Required for PALLET labels" : undefined)}{textarea("packageLabelsToPrint", "Package labels to print", "Optional · one CartonId / boxId per line")}{text("shipmentPageSize", "Page size", "Required for some non-partnered LTL label flows")}{text("pageStartIndex", "Page start index", "Required for some non-partnered LTL label flows")}</>;
       break;
     }
     case "billOfLading":
-      content = text("shipmentId", "Shipment ID", "FBA123456789", true);
+      content = environment === "sandbox"
+        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s bill-of-lading fixture. Its DownloadURL is a placeholder, not a real PDF.</span></div>
+        : text("shipmentId", "Shipment ID", "FBA123456789", true);
       break;
     default:
       content = null;
