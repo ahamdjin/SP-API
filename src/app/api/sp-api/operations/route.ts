@@ -58,7 +58,9 @@ export async function POST(request: Request) {
           marketplaceIds: input.marketplaceId,
         });
         addCsv(params, "sellerSkus", optionalString(fields, "sellerSkus"), 50);
-        addOptional(params, "startDateTime", optionalDate(fields, "startDateTime"));
+        const startDateTime = optionalDate(fields, "startDateTime");
+        validateInventoryStartDate(startDateTime);
+        addOptional(params, "startDateTime", startDateTime);
         addOptional(params, "nextToken", optionalString(fields, "inventoryNextToken"));
         result = await call(input, "/fba/inventory/v1/summaries?" + params);
         break;
@@ -105,8 +107,11 @@ export async function POST(request: Request) {
           if (processingStatuses.length) params.set("processingStatuses", processingStatuses.join(","));
           addCsv(params, "marketplaceIds", optionalString(fields, "reportMarketplaceIds"), 10);
           addOptional(params, "pageSize", optionalIntegerField(fields, "pageSize", 1, 100));
-          addOptional(params, "createdSince", optionalDate(fields, "createdSince"));
-          addOptional(params, "createdUntil", optionalDate(fields, "createdUntil"));
+          const createdSince = optionalDate(fields, "createdSince");
+          const createdUntil = optionalDate(fields, "createdUntil");
+          validateOptionalRange(createdSince || undefined, createdUntil || undefined, "createdSince", "createdUntil");
+          addOptional(params, "createdSince", createdSince);
+          addOptional(params, "createdUntil", createdUntil);
         }
         result = await call(input, "/reports/2021-06-30/reports?" + params);
         break;
@@ -153,8 +158,11 @@ export async function POST(request: Request) {
           if (processingStatuses.length) params.set("processingStatuses", processingStatuses.join(","));
           addCsv(params, "marketplaceIds", optionalString(fields, "feedMarketplaceIds"), 10);
           addOptional(params, "pageSize", optionalIntegerField(fields, "pageSize", 1, 100));
-          addOptional(params, "createdSince", optionalDate(fields, "createdSince"));
-          addOptional(params, "createdUntil", optionalDate(fields, "createdUntil"));
+          const createdSince = optionalDate(fields, "createdSince");
+          const createdUntil = optionalDate(fields, "createdUntil");
+          validateOptionalRange(createdSince || undefined, createdUntil || undefined, "createdSince", "createdUntil");
+          addOptional(params, "createdSince", createdSince);
+          addOptional(params, "createdUntil", createdUntil);
         }
         result = await call(input, "/feeds/2021-06-30/feeds?" + params);
         break;
@@ -518,6 +526,20 @@ function safeAmazonDocumentUrl(value: string, label: string) {
     );
   }
   return url;
+}
+
+function validateInventoryStartDate(startDateTime: string) {
+  if (!startDateTime) return;
+  const earliest = new Date();
+  earliest.setUTCMonth(earliest.getUTCMonth() - 18);
+  if (new Date(startDateTime).getTime() < earliest.getTime()) {
+    throw new SpApiError(
+      "startDateTime cannot be earlier than 18 months before the request",
+      400,
+      { startDateTime, earliestAllowed: earliest.toISOString() },
+      "INVENTORY_START_TOO_OLD",
+    );
+  }
 }
 
 function validateCreatedOrderWindow(createdAfter: string, createdBefore: string) {
