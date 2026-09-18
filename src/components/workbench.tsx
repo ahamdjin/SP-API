@@ -1192,6 +1192,13 @@ function ActionRow({ children }: { children: React.ReactNode }) {
   return <div className="workflow-actions">{children}</div>;
 }
 
+function PaginationResult({ token, onNext }: { token: string; onNext: () => void }) {
+  return <div className="pagination-result">
+    <div><span>More Amazon data is available</span><code>{token}</code></div>
+    <button className="workflow-action primary" type="button" onClick={onNext}><ArrowRight size={14} /> Prepare next page</button>
+  </div>;
+}
+
 function WorkflowNote({ children }: { children: React.ReactNode }) {
   return <div className="workflow-note"><FileSearch size={16} /><p>{children}</p></div>;
 }
@@ -1219,10 +1226,10 @@ function RecordList({
   })}</div>;
 }
 
-function CompactTable({ records, preferredKeys }: { records: Record<string, unknown>[]; preferredKeys: string[] }) {
+function CompactTable({ records, preferredKeys, maxColumns = 5 }: { records: Record<string, unknown>[]; preferredKeys: string[]; maxColumns?: number }) {
   if (!records.length) return null;
-  const keys = preferredKeys.filter((key) => records.some((record) => record[key] !== undefined)).slice(0, 5);
-  const columns = keys.length ? keys : Object.keys(records[0]).filter((key) => isScalar(records[0][key])).slice(0, 5);
+  const keys = preferredKeys.filter((key) => records.some((record) => record[key] !== undefined)).slice(0, maxColumns);
+  const columns = keys.length ? keys : Object.keys(records[0]).filter((key) => isScalar(records[0][key])).slice(0, maxColumns);
   return <div className="compact-table-wrap"><table className="compact-table"><thead><tr>{columns.map((key) => <th key={key}>{formatLabel(key)}</th>)}</tr></thead><tbody>{records.map((record, index) => <tr key={index}>{columns.map((key) => <td key={key}>{displayValue(record[key]) || "—"}</td>)}</tr>)}</tbody></table></div>;
 }
 
@@ -1234,6 +1241,10 @@ type DocumentView = {
   bytesRead: number | null;
   truncated: boolean;
   error: string;
+  downloadType: string;
+  expiration: string;
+  compressionAlgorithm: string;
+  contentDisposition: string;
 };
 
 function DocumentResults({ documents, environment }: { documents: DocumentView[]; environment: SpApiEnvironment }) {
@@ -1242,7 +1253,15 @@ function DocumentResults({ documents, environment }: { documents: DocumentView[]
     const href = safeDocumentHref(document.url);
     return <article className="document-card" key={document.url + "-" + String(index)}>
       <div className="document-card-heading"><div><span>{"Document " + String(index + 1)}</span><strong>{document.label}</strong></div>{document.contentType && <code>{document.contentType}</code>}</div>
-      <div className="document-meta">{document.bytesRead !== null && <span>{new Intl.NumberFormat().format(document.bytesRead)} bytes read</span>}{document.truncated && <span>Preview truncated</span>}{environment === "sandbox" && !document.content && <span>Static sandbox may return a mock URL rather than a real file.</span>}</div>
+      <div className="document-meta">
+        {document.downloadType && <span>{document.downloadType}</span>}
+        {document.expiration && <span>Expires {document.expiration}</span>}
+        {document.compressionAlgorithm && <span>Compression {document.compressionAlgorithm}</span>}
+        {document.contentDisposition && <span>{document.contentDisposition}</span>}
+        {document.bytesRead !== null && <span>{new Intl.NumberFormat().format(document.bytesRead)} bytes read</span>}
+        {document.truncated && <span>Preview truncated</span>}
+        {environment === "sandbox" && !document.content && <span>Static sandbox may return a mock URL rather than a real file.</span>}
+      </div>
       {href ? <a className="workflow-action primary document-download" href={href} target="_blank" rel="noreferrer"><Download size={15} /> Open / download original <ExternalLink size={13} /></a> : <p className="document-unavailable">Amazon returned a non-HTTPS or placeholder document URL, so the workbench will not open it.</p>}
       {document.error && <p className="document-unavailable">{document.error}</p>}
       {document.content && <pre className="document-preview"><code>{document.content}</code></pre>}
@@ -1263,6 +1282,10 @@ function extractDocuments(data: Record<string, unknown>): DocumentView[] {
       bytesRead: numberValue(downloaded.bytesRead),
       truncated: downloaded.truncated === true,
       error: stringValue(downloaded.error),
+      downloadType: "",
+      expiration: "",
+      compressionAlgorithm: stringValue(data.compressionAlgorithm),
+      contentDisposition: stringValue(downloaded.contentDisposition),
     });
   }
 
@@ -1278,6 +1301,10 @@ function extractDocuments(data: Record<string, unknown>): DocumentView[] {
         bytesRead: null,
         truncated: false,
         error: "",
+        downloadType: stringValue(document.downloadType),
+        expiration: stringValue(document.expiration),
+        compressionAlgorithm: "",
+        contentDisposition: "",
       });
     });
   }
@@ -1293,6 +1320,10 @@ function extractDocuments(data: Record<string, unknown>): DocumentView[] {
       bytesRead: null,
       truncated: false,
       error: "",
+      downloadType: "URL",
+      expiration: "",
+      compressionAlgorithm: "",
+      contentDisposition: "",
     });
   }
   return output;
