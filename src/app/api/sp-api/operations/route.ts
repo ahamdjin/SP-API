@@ -4,9 +4,7 @@ import { callSpApi, privateHeaders, SpApiError, toErrorResponse } from "@/lib/sp
 
 export const dynamic = "force-dynamic";
 
-const allOrderData = [
-  "BUYER",
-  "RECIPIENT",
+const coreOrderData = [
   "PROCEEDS",
   "EXPENSE",
   "PROMOTION",
@@ -17,6 +15,12 @@ const allOrderData = [
   "PAYMENT",
   "FULFILLMENT_ORDERS",
 ].join(",");
+
+function orderIncludedData(fields: Fields) {
+  return booleanField(fields, "includeOrderPii")
+    ? ["BUYER", "RECIPIENT", coreOrderData].join(",")
+    : coreOrderData;
+}
 
 const sandboxOrderData = [
   "BUYER",
@@ -71,7 +75,7 @@ export async function POST(request: Request) {
           marketplaceIds: input.marketplaceId,
           createdAfter,
           maxResultsPerPage: String(numberField(fields, "pageSize", 1, 100, 50)),
-          includedData: allOrderData,
+          includedData: orderIncludedData(fields),
         });
         addOptional(params, "createdBefore", createdBefore);
         addCsv(params, "fulfillmentStatuses", optionalString(fields, "statuses"), 7);
@@ -83,7 +87,7 @@ export async function POST(request: Request) {
 
       case "order": {
         const orderId = input.environment === "sandbox" ? "171-9876543-2109876" : stringField(fields, "orderId");
-        const includedData = input.environment === "sandbox" ? sandboxOrderData : allOrderData;
+        const includedData = input.environment === "sandbox" ? sandboxOrderData : orderIncludedData(fields);
         result = await call(input, "/orders/2026-01-01/orders/" + encodeURIComponent(orderId) + "?includedData=" + encodeURIComponent(includedData));
         break;
       }
