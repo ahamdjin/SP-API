@@ -74,17 +74,17 @@ const defaultFields: Record<string, FieldValue> = {
   details: true,
   includeOrderPii: false,
   pageSize: "20",
-  createdAfter: toLocalDateTime(new Date(Date.now() - 20 * 24 * 60 * 60 * 1000)),
+  createdAfter: toLocalDateTime(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
   createdBefore: "",
-  statuses: "UNSHIPPED,SHIPPED",
-  fulfilledBy: "AMAZON",
-  reportTypes: "GET_MERCHANT_LISTINGS_ALL_DATA",
+  statuses: "",
+  fulfilledBy: "",
+  reportTypes: "",
   reportType: "GET_MERCHANT_LISTINGS_ALL_DATA",
-  processingStatuses: "DONE,IN_PROGRESS,IN_QUEUE",
-  feedTypes: "JSON_LISTINGS_FEED",
+  processingStatuses: "",
+  feedTypes: "",
   feedType: "JSON_LISTINGS_FEED",
   contentType: "application/json; charset=UTF-8",
-  status: "ACTIVE",
+  status: "",
   sortBy: "LAST_UPDATED_TIME",
   sortOrder: "DESC",
   countryCode: "US",
@@ -722,7 +722,7 @@ function OperationFields({
     case "reports":
       content = environment === "sandbox"
         ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox uses Amazon&apos;s fixed list-reports fixture: FEE_DISCOUNTS_REPORT + GET_AFN_INVENTORY_DATA with IN_QUEUE + IN_PROGRESS. The workbench sends those exact parameters automatically.</span></div>
-        : <>{text("reportTypes", "Report type(s)", "GET_MERCHANT_LISTINGS_ALL_DATA", true)}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("reportNextToken", "Next-page token", "Optional · from the previous response")}</>;
+        : <>{text("reportTypes", "Report type(s)", "Optional · e.g. GET_MERCHANT_LISTINGS_ALL_DATA")}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("reportNextToken", "Next-page token", "Optional · from the previous response")}</>;
       break;
     case "createReport":
       content = environment === "sandbox"
@@ -742,7 +742,7 @@ function OperationFields({
     case "feeds":
       content = environment === "sandbox"
         ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s POST_PRODUCT_DATA / CANCELLED,DONE list fixture.</span></div>
-        : <>{text("feedTypes", "Feed type(s)", "JSON_LISTINGS_FEED", true)}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("feedNextToken", "Next-page token", "Optional · from the previous response")}</>;
+        : <>{text("feedTypes", "Feed type(s)", "Optional · e.g. JSON_LISTINGS_FEED")}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("feedNextToken", "Next-page token", "Optional · from the previous response")}</>;
       break;
     case "feed":
       content = environment === "sandbox"
