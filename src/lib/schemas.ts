@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+// Server-side validation for the credentials and request values sent by the workbench.
 export const credentialsSchema = z.object({
   clientId: z.string().trim().min(1, "Client ID is required"),
   clientSecret: z.string().trim().min(1, "Client secret is required"),
@@ -45,6 +46,7 @@ export const feesRequestSchema = baseRequestSchema.extend({
   pointsAmount: z.coerce.number().min(0).optional(),
 });
 
+// Limits the generic operations endpoint to the Amazon actions the UI actually supports.
 export const operationRequestSchema = baseRequestSchema.extend({
   operation: z.enum([
     "inventory",
