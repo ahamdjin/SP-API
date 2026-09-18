@@ -17,6 +17,18 @@ const includedData = [
   "vendorDetails",
 ].join(",");
 
+const sandboxCatalogIncludedData = [
+  "classifications",
+  "dimensions",
+  "identifiers",
+  "images",
+  "productTypes",
+  "relationships",
+  "salesRanks",
+  "summaries",
+  "vendorDetails",
+].join(",");
+
 export async function POST(request: Request) {
   try {
     const input = catalogRequestSchema.parse(await request.json());
@@ -25,6 +37,36 @@ export async function POST(request: Request) {
 
     const identifiers = splitCsv(input.query).slice(0, 20).map((identifier) => input.identifierType === "ASIN" ? identifier.toUpperCase() : identifier);
     const { accessToken } = await getAccessToken(input);
+
+    if (input.environment === "sandbox" && input.mode === "identifier" && input.identifierType === "ASIN" && identifiers.length === 1) {
+      const params = new URLSearchParams({
+        marketplaceIds: input.marketplaceId,
+        includedData: sandboxCatalogIncludedData,
+      });
+      const result = await callSpApi({
+        credentials: input,
+        marketplaceId: input.marketplaceId,
+        path: `/catalog/2022-04-01/items/${encodeURIComponent(identifiers[0])}?${params.toString()}`,
+        accessToken,
+        environment: input.environment,
+      });
+      if (result.ok) {
+        return Response.json(
+          {
+            ...result,
+            data: {
+              numberOfResults: 1,
+              items: [result.data],
+              sandbox: {
+                note: "Amazon static sandbox only matches predefined Catalog request examples. The official example ASIN is B07N4M94X4 for the US marketplace.",
+              },
+            },
+          },
+          { status: 200, headers: privateHeaders },
+        );
+      }
+      return Response.json(result, { status: result.status, headers: privateHeaders });
+    }
 
     if (input.mode === "identifier" && input.identifierType === "ASIN" && identifiers.length === 1 && input.includeVariations) {
       const result = await getCompleteRelatedCatalog({
