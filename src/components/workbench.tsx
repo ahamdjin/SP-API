@@ -586,6 +586,33 @@ export function Workbench() {
   );
 }
 
+
+function ResponseContractCard({ operation }: { operation: Operation }) {
+  const contract = responseContracts[operation];
+  return <div className="response-contract">
+    <div className="response-contract-head">
+      <div><span>Request / response contract</span><code>{contract.request}</code></div>
+      <strong>{contract.delivery}</strong>
+    </div>
+    <div className="response-contract-body">
+      <div>
+        <small>Amazon returns</small>
+        <div className="response-field-chips">{contract.returns.map((value) => <span key={value}>{value}</span>)}</div>
+      </div>
+      <p><strong>Then:</strong> {contract.next}</p>
+      {contract.pagination && <p><strong>Pagination:</strong> <code>{contract.pagination}</code></p>}
+      {contract.note && <p className="contract-note">{contract.note}</p>}
+    </div>
+  </div>;
+}
+
+function ReturnedDataPanel({ data }: { data: unknown }) {
+  return <details className="returned-data-panel">
+    <summary><Braces size={15} /><span><strong>All returned data</strong><small>Complete Amazon data payload for this request</small></span></summary>
+    <pre><code>{JSON.stringify(data, null, 2)}</code></pre>
+  </details>;
+}
+
 function OperationPicker({ active, onChange }: { active: Operation; onChange: (operation: Operation) => void }) {
   return <div className="operation-picker">{operationGroups.map((group) => (
     <div className="operation-group" key={group.label}>
