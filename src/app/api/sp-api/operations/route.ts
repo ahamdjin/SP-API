@@ -204,11 +204,12 @@ export async function POST(request: Request) {
           throw new SpApiError("countryCode must be a two-letter ISO country code", 400, { countryCode }, "INVALID_COUNTRY_CODE");
         }
 
+        const requestedDestinations = destinationMarketplaces.length ? destinationMarketplaces : [input.marketplaceId];
         const items = parseItems(stringField(fields, "items"), 2000, 500000);
-        validateInboundItems(items, input.marketplaceId);
+        validateInboundItems(items, requestedDestinations[0]);
 
         result = await call(input, "/inbound/fba/2024-03-20/inboundPlans", "POST", {
-          destinationMarketplaces: destinationMarketplaces.length ? destinationMarketplaces : [input.marketplaceId],
+          destinationMarketplaces: requestedDestinations,
           name: optionalLimitedStringField(fields, "planName", 40) || undefined,
           sourceAddress: {
             name: limitedStringField(fields, "contactName", 50),
