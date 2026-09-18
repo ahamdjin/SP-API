@@ -4,6 +4,7 @@ const isoDatePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 export function preserveIsoInstant(value: string) {
   const trimmed = value.trim();
   if (!isoInstantPattern.test(trimmed)) return null;
+  if (!preserveIsoDate(trimmed.slice(0, 10))) return null;
   return Number.isNaN(Date.parse(trimmed)) ? null : trimmed;
 }
 
