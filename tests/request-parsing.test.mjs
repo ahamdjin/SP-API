@@ -60,3 +60,7 @@ test("preserveIsoDate accepts real inbound expiration dates", () => {
 test("preserveIsoDate rejects impossible expiration dates", () => {
   assert.equal(preserveIsoDate("2024-02-31"), null);
 });
+
+test("preserveIsoInstant rejects impossible calendar dates", () => {
+  assert.equal(preserveIsoInstant("2024-02-31T00:00:00Z"), null);
+});
