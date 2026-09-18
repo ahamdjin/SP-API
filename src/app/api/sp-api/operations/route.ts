@@ -237,6 +237,7 @@ export async function POST(request: Request) {
         break;
     }
 
+    result = applyBusinessOutcome(input.operation, result);
     return Response.json(result, { status: result.ok ? 200 : result.status, headers: privateHeaders });
   } catch (error) {
     return toErrorResponse(error);
@@ -439,6 +440,156 @@ function validateOptionalRange(start: string | undefined, end: string | undefine
   if (new Date(end).getTime() < new Date(start).getTime()) {
     throw new SpApiError(`${endLabel} must be equal to or after ${startLabel}`, 400, null, "INVALID_DATE_RANGE");
   }
+}
+
+function applyBusinessOutcome(operation: Input["operation"], result: CallResult): CallResult {
+  if (!result.ok) return result;
+
+  const data = record(result.data);
+
+  if (operation === "feed") {
+    const processingStatus = typeof data.processingStatus === "string" ? data.processingStatus : "";
+    if (processingStatus === "FATAL" || processingStatus === "CANCELLED") {
+      return {
+        ...result,
+        ok: false,
+        statusText: "Feed processing " + processingStatus.toLowerCase(),
+        problem: {
+          code: "FEED_" + processingStatus,
+          message: processingStatus === "FATAL"
+            ? "Amazon aborted the feed during processing. Some records may or may not have been applied."
+            : "Amazon cancelled the feed before processing completed.",
+          details: typeof data.resultFeedDocumentId === "string"
+            ? "resultFeedDocumentId: " + data.resultFeedDocumentId
+            : null,
+          action: typeof data.resultFeedDocumentId === "string"
+            ? "Open Feed processing report with the returned resultFeedDocumentId, fix every reported record error, then submit a corrected feed."
+            : "Review the feed inputs and submit a new feed only after the underlying cause is understood.",
+          retryable: false,
+        },
+      };
+    }
+    if (processingStatus === "DONE") {
+      return {
+        ...result,
+        data: {
+          ...data,
+          nextStep: typeof data.resultFeedDocumentId === "string"
+            ? "Use Feed processing report with resultFeedDocumentId before treating individual records as successful."
+            : "Feed processing is DONE. Confirm the response contains a resultFeedDocumentId and inspect the processing report when available.",
+        },
+      };
+    }
+    if (processingStatus === "IN_QUEUE" || processingStatus === "IN_PROGRESS") {
+      return {
+        ...result,
+        data: { ...data, nextStep: "The feed is still processing. Poll Feed status again later; do not resubmit the same feed just because it is still pending." },
+      };
+    }
+  }
+
+  if (operation === "report") {
+    const processingStatus = typeof data.processingStatus === "string" ? data.processingStatus : "";
+    if (processingStatus === "FATAL" || processingStatus === "CANCELLED") {
+      return {
+        ...result,
+        ok: false,
+        statusText: "Report processing " + processingStatus.toLowerCase(),
+        problem: {
+          code: "REPORT_" + processingStatus,
+          message: processingStatus === "FATAL"
+            ? "Amazon could not complete the report job."
+            : "The report job was cancelled.",
+          details: typeof data.reportId === "string" ? "reportId: " + data.reportId : null,
+          action: "Verify the report type, requested date range, marketplace, and required role. Create a new report only after correcting the cause.",
+          retryable: false,
+        },
+      };
+    }
+    if (processingStatus === "DONE") {
+      return {
+        ...result,
+        data: {
+          ...data,
+          nextStep: typeof data.reportDocumentId === "string"
+            ? "Use Report document with reportDocumentId to download and inspect the generated report."
+            : "Report processing is DONE. Confirm Amazon returned reportDocumentId before attempting a download.",
+        },
+      };
+    }
+    if (processingStatus === "IN_QUEUE" || processingStatus === "IN_PROGRESS") {
+      return {
+        ...result,
+        data: { ...data, nextStep: "The report is still processing. Poll Report status again later instead of creating a duplicate report." },
+      };
+    }
+  }
+
+  if (operation === "inboundOperationStatus") {
+    const operationStatus = typeof data.operationStatus === "string" ? data.operationStatus : "";
+    const problems = Array.isArray(data.operationProblems) ? data.operationProblems.filter((item) => typeof item === "object" && item !== null) : [];
+    const firstProblem = record(problems[0]);
+
+    if (operationStatus === "FAILED") {
+      const code = typeof firstProblem.code === "string" ? firstProblem.code : "INBOUND_OPERATION_FAILED";
+      const message = typeof firstProblem.message === "string"
+        ? firstProblem.message
+        : "The asynchronous Fulfillment Inbound operation finished in a failed state.";
+      const details = problems.length ? JSON.stringify(problems) : null;
+      return {
+        ...result,
+        ok: false,
+        statusText: "Inbound operation failed",
+        problem: {
+          code,
+          message,
+          details,
+          action: "Read every operationProblem, correct the inbound plan/item/shipment data it identifies, then start a new valid operation. Do not assume the original write was applied.",
+          retryable: false,
+        },
+      };
+    }
+
+    if (operationStatus === "IN_PROGRESS") {
+      return {
+        ...result,
+        data: { ...data, nextStep: "This operation has not finished yet. Poll Operation status again before continuing to dependent inbound workflow steps." },
+      };
+    }
+
+    if (operationStatus === "SUCCESS" && problems.length) {
+      return {
+        ...result,
+        data: {
+          ...data,
+          businessWarnings: problems,
+          nextStep: "The operation succeeded, but Amazon returned warnings. Review operationProblems before continuing.",
+        },
+      };
+    }
+  }
+
+  if (operation === "createInboundPlan" && typeof data.operationId === "string") {
+    return {
+      ...result,
+      data: {
+        ...data,
+        nextStep: "Use Operation status with operationId and wait for SUCCESS before continuing with dependent inbound workflow steps.",
+      },
+    };
+  }
+
+  if (operation === "createReport" && typeof data.reportId === "string") {
+    return {
+      ...result,
+      data: {
+        ...data,
+        nextStep: "Poll Report status with reportId until DONE, FATAL, or CANCELLED. Download the report only after DONE.",
+      },
+    };
+  }
+
+  return result;
 }
 
 function stringField(fields: Fields, key: string) {
