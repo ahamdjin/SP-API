@@ -72,6 +72,7 @@ type OperationItem = {
 const initialCredentials: Credentials = { clientId: "", clientSecret: "", refreshToken: "" };
 const defaultFields: Record<string, FieldValue> = {
   details: true,
+  includeOrderPii: false,
   pageSize: "20",
   createdAfter: toLocalDateTime(new Date(Date.now() - 20 * 24 * 60 * 60 * 1000)),
   createdBefore: "",
@@ -187,15 +188,17 @@ const responseContracts: Record<Operation, ResponseContract> = {
   orders: {
     request: "GET /orders/2026-01-01/orders",
     delivery: "Immediate JSON response",
-    returns: ["orders[]", "orderItems", "buyer / recipient", "proceeds / payment / tax", "fulfillment / packages", "pagination.nextToken"],
+    returns: ["orders[]", "orderItems", "proceeds / payment / tax", "fulfillment / packages", "optional buyer / recipient", "pagination.nextToken"],
     next: "Open an order by orderId or continue with pagination.nextToken.",
+    note: "Buyer and recipient PII are opt-in in Production so normal order reads still work without PII roles.",
     pagination: "pagination.nextToken",
   },
   order: {
     request: "GET /orders/2026-01-01/orders/{orderId}",
     delivery: "Immediate JSON response",
-    returns: ["order", "orderItems", "buyer / recipient", "proceeds / payment / tax", "fulfillment / packages / fulfillmentOrders"],
+    returns: ["order", "orderItems", "proceeds / payment / tax", "fulfillment / packages / fulfillmentOrders", "optional buyer / recipient"],
     next: "The Result tab shows the order summary/items; All returned data shows every included data group Amazon returned.",
+    note: "Enable buyer/recipient only when your Production app has the corresponding Orders PII roles.",
   },
   reports: {
     request: "GET /reports/2021-06-30/reports",
@@ -708,12 +711,12 @@ function OperationFields({
     case "orders":
       content = environment === "sandbox"
         ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s Orders 2026 Japan fixture created after <strong>2024-12-25T00:00:00Z</strong>.</span></div>
-        : <>{date("createdAfter", "Created after", true)}{date("createdBefore", "Created before")}{text("statuses", "Order statuses", "UNSHIPPED,SHIPPED")}{text("fulfilledBy", "Fulfilled by", "AMAZON or MERCHANT")}{text("pageSize", "Results per page", "50")}{text("orderPaginationToken", "Next-page token", "Optional · from the previous response")}<div className="dataset-note"><Check size={15} /><span>Requests all Orders 2026 data groups, including buyer, recipient, payment, tax, packages, fulfilment, promotions, proceeds, expenses, cancellations, and order items.</span></div></>;
+        : <>{date("createdAfter", "Created after", true)}{date("createdBefore", "Created before")}{text("statuses", "Order statuses", "UNSHIPPED,SHIPPED")}{text("fulfilledBy", "Fulfilled by", "AMAZON or MERCHANT")}{text("pageSize", "Results per page", "50")}{text("orderPaginationToken", "Next-page token", "Optional · from the previous response")}<CheckField label="Include buyer + recipient PII (requires the appropriate Orders roles)" checked={Boolean(fields.includeOrderPii)} onChange={(checked) => updateField("includeOrderPii", checked)} /><div className="dataset-note"><Check size={15} /><span>Core order data includes payment, tax, packages, fulfilment, promotions, proceeds, expenses, cancellations, fulfilment orders, and order items. Buyer/recipient data is opt-in to avoid role-related Production failures.</span></div></>;
       break;
     case "order":
       content = environment === "sandbox"
         ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically opens Amazon&apos;s Orders 2026 example <strong>171-9876543-2109876</strong>.</span></div>
-        : text("orderId", "Amazon order ID", "114-1234567-1234567", true);
+        : <>{text("orderId", "Amazon order ID", "114-1234567-1234567", true)}<CheckField label="Include buyer + recipient PII (requires the appropriate Orders roles)" checked={Boolean(fields.includeOrderPii)} onChange={(checked) => updateField("includeOrderPii", checked)} /></>;
       break;
     case "reports":
       content = environment === "sandbox"
