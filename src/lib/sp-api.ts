@@ -17,12 +17,17 @@ type AmazonResponse = {
   status: number;
   statusText: string;
   requestId: string | null;
+  gatewayId: string | null;
+  traceId: string | null;
   rateLimit: string | null;
   data: unknown;
   durationMs: number;
   attempts: number;
   problem: SpApiProblem | null;
 };
+
+type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+type RetryMode = "read" | "write" | "safe-post";
 
 export class SpApiError extends Error {
   status: number;
@@ -50,7 +55,7 @@ export async function getAccessToken(credentials: Credentials) {
     }),
     cache: "no-store",
     signal: AbortSignal.timeout(30_000),
-  }));
+  }), "safe-post");
 
   const data = await readJson(response);
   if (!response.ok) {
@@ -85,7 +90,7 @@ export async function callSpApi({
   credentials: Credentials;
   marketplaceId: string;
   path: string;
-  method?: "GET" | "POST" | "PUT" | "DELETE";
+  method?: HttpMethod;
   body?: unknown;
   accessToken?: string;
   environment?: SpApiEnvironment;
@@ -97,19 +102,20 @@ export async function callSpApi({
   const startedAt = performance.now();
   const url = `${getEndpoint(marketplace.region, environment)}${path}`;
 
+  const retryMode: RetryMode = method === "GET" ? "read" : "write";
   const { response, attempts } = await fetchWithRetry(url, () => ({
     method,
     headers: {
       accept: "application/json",
       ...(body === undefined ? {} : { "content-type": "application/json" }),
-      "user-agent": "SP-API-Workbench/1.1 (Language=TypeScript; Platform=Node.js)",
+      "user-agent": "SP-API-Workbench/1.2 (Language=TypeScript; Platform=Node.js)",
       "x-amz-access-token": token,
       "x-amz-date": toAmazonDate(new Date()),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
     signal: AbortSignal.timeout(30_000),
-  }));
+  }), retryMode);
 
   const data = await readJson(response);
   const requestId = response.headers.get("x-amzn-requestid");
@@ -118,6 +124,7 @@ export async function callSpApi({
     statusText: response.statusText,
     data,
     headerCode: response.headers.get("x-amzn-errortype"),
+    method,
   });
 
   return {
@@ -125,6 +132,8 @@ export async function callSpApi({
     status: response.status,
     statusText: response.statusText,
     requestId,
+    gatewayId: response.headers.get("x-amz-apigw-id"),
+    traceId: response.headers.get("x-amzn-trace-id"),
     rateLimit: response.headers.get("x-amzn-ratelimit-limit"),
     data,
     durationMs: Math.round(performance.now() - startedAt),
@@ -172,7 +181,7 @@ export function toErrorResponse(error: unknown) {
     code: "CLIENT_INTERNAL_ERROR",
     message: "The request could not be completed by the workbench.",
     details: error instanceof Error ? error.message : null,
-    action: "Check the server log. If this is a network timeout, retry once; if it repeats, inspect the failing route before using a production write operation.",
+    action: "Check the server log. For reads, retry after correcting the local/network issue. If this happened during a write, verify the Amazon resource or job state before submitting the write again.",
     retryable: true,
   };
   return Response.json(
@@ -196,13 +205,47 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
-async function fetchWithRetry(url: string, initFactory: () => RequestInit) {
+async function fetchWithRetry(url: string, initFactory: () => RequestInit, retryMode: RetryMode) {
   const maxAttempts = 4;
   let response: Response | null = null;
+  let lastError: unknown = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    response = await fetch(url, initFactory());
-    if (!isTransientStatus(response.status) || attempt === maxAttempts) {
+    try {
+      response = await fetch(url, initFactory());
+    } catch (error) {
+      lastError = error;
+      const canRetryNetwork = retryMode !== "write";
+      if (canRetryNetwork && attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, clampDelay(750 * 2 ** (attempt - 1))));
+        continue;
+      }
+
+      const details = {
+        url: safeUrlForDiagnostics(url),
+        cause: error instanceof Error ? error.message : String(error),
+        timeout: isTimeoutError(error),
+        ambiguousWriteResult: retryMode === "write",
+      };
+
+      if (retryMode === "write") {
+        throw new SpApiError(
+          "The connection failed while sending an Amazon write request. Amazon may have received the request even though no response reached the workbench.",
+          502,
+          details,
+          "AMBIGUOUS_WRITE_RESULT",
+        );
+      }
+
+      throw new SpApiError(
+        isTimeoutError(error) ? "The request to Amazon timed out." : "The workbench could not reach Amazon.",
+        502,
+        details,
+        isTimeoutError(error) ? "AMAZON_TIMEOUT" : "AMAZON_NETWORK_ERROR",
+      );
+    }
+
+    if (!shouldRetryStatus(response.status, retryMode) || attempt === maxAttempts) {
       return { response, attempts: attempt };
     }
 
@@ -210,8 +253,13 @@ async function fetchWithRetry(url: string, initFactory: () => RequestInit) {
     await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
 
-  if (!response) throw new SpApiError("Amazon request did not produce a response", 502, null, "NO_RESPONSE");
-  return { response, attempts: maxAttempts };
+  if (response) return { response, attempts: maxAttempts };
+  throw new SpApiError(
+    "Amazon request did not produce a response",
+    502,
+    { cause: lastError instanceof Error ? lastError.message : lastError },
+    "NO_RESPONSE",
+  );
 }
 
 function retryDelayMs(response: Response, attempt: number) {
@@ -239,6 +287,25 @@ function isTransientStatus(status: number) {
   return [429, 500, 502, 503, 504].includes(status);
 }
 
+function shouldRetryStatus(status: number, retryMode: RetryMode) {
+  if (status === 429) return true;
+  if ([500, 502, 503, 504].includes(status)) return retryMode !== "write";
+  return false;
+}
+
+function isTimeoutError(error: unknown) {
+  return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError" || /timeout|timed out/i.test(error.message));
+}
+
+function safeUrlForDiagnostics(value: string) {
+  try {
+    const url = new URL(value);
+    return url.origin + url.pathname;
+  } catch {
+    return "Amazon SP-API endpoint";
+  }
+}
+
 function toAmazonDate(date: Date) {
   return date.toISOString().replace(/[:-]|\.\d{3}/g, "");
 }
@@ -250,6 +317,7 @@ function buildProblem({
   headerCode,
   fallbackMessage,
   fallbackCode,
+  method,
 }: {
   status: number;
   statusText: string;
@@ -257,24 +325,31 @@ function buildProblem({
   headerCode?: string | null;
   fallbackMessage?: string;
   fallbackCode?: string;
+  method?: HttpMethod;
 }): SpApiProblem {
   const first = firstError(data);
   const code = first.code || extractCode(data) || fallbackCode || headerCode?.split(":")[0] || `HTTP_${status}`;
   const message = first.message || extractMessage(data, fallbackMessage || statusText || `Amazon returned HTTP ${status}`);
   const details = first.details || extractDetails(data);
-  const retryable = isTransientStatus(status);
+  const retryable = status === 429 || (method === "GET" && isTransientStatus(status));
   return {
     code,
     message,
     details,
-    action: recommendedAction(code, status, message, retryable),
+    action: recommendedAction(code, status, message, retryable, method),
     retryable,
   };
 }
 
-function recommendedAction(code: string, status: number, message: string, retryable: boolean) {
+function recommendedAction(code: string, status: number, message: string, retryable: boolean, method?: HttpMethod) {
   const key = `${code} ${message}`.toLowerCase();
 
+  if (key.includes("ambiguous_write_result")) {
+    return "Do not blindly submit the write again. First check the related Amazon resource or job status to see whether the original request was applied. Retry only after you can confirm it was not.";
+  }
+  if (key.includes("amazon_timeout") || key.includes("amazon_network_error")) {
+    return "For a read request, retry with backoff. If this repeats, check Amazon SP-API status and your server network/TLS connectivity.";
+  }
   if (key.includes("invalid_grant") || key.includes("refresh token")) {
     return "Self-authorize or reconnect the seller account to obtain a fresh refresh token, then retry.";
   }
@@ -307,6 +382,9 @@ function recommendedAction(code: string, status: number, message: string, retrya
   }
   if (status === 422) {
     return "The request is syntactically valid but violates an Amazon business rule. Read the error details, correct the resource state/data, and retry.";
+  }
+  if (status >= 500 && method && method !== "GET") {
+    return "Amazon returned a server error for a write request. Do not immediately resubmit it. Verify the related feed, report, inbound plan, or other resource first; if it was not created/applied, then retry. Keep the Amazon request ID for support.";
   }
   if (retryable || status >= 500) {
     return "Retry with backoff. If the error persists, use the Amazon request ID shown by the workbench when contacting SP-API support.";
