@@ -196,7 +196,7 @@ export function toErrorResponse(error: unknown) {
     message: "The request could not be completed by the workbench.",
     details: error instanceof Error ? error.message : null,
     action: "Check the server log. For reads, retry after correcting the local/network issue. If this happened during a write, verify the Amazon resource or job state before submitting the write again.",
-    retryable: true,
+    retryable: false,
   };
   return Response.json(
     { ok: false, error: problem.message, problem },
