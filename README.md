@@ -4,7 +4,7 @@ A local workbench for testing Amazon Selling Partner API credentials and running
 
 ## Included tools
 
-- LWA credential test (`client_id`, `client_secret`, and `refresh_token`)
+- LWA + SP-API connection test (`client_id`, `client_secret`, `refresh_token`, environment, and marketplace)
 - Catalog Items API `2022-04-01`
 - ASIN, UPC, EAN, GTIN, ISBN, JAN, MINSAN, SKU, and keyword searches
 - Exact-ASIN lookup with every Catalog Items dataset and recursive variation/package-family retrieval
@@ -13,8 +13,8 @@ A local workbench for testing Amazon Selling Partner API credentials and running
 - FBA inventory summaries
 - Order search and full order retrieval using Orders API `2026-01-01`, requesting every optional data group
 - Report listing, creation, status, and document URL retrieval
-- Feed listing, status, document upload, and submission
-- FBA inbound plan, shipment, prep, plan creation, and item-label tools using Fulfillment Inbound `2024-03-20`
+- Feed listing, status, document upload/submission, and processing-report download
+- FBA inbound plan, shipment, prep, plan creation, asynchronous operation-status verification, and item-label tools using Fulfillment Inbound `2024-03-20`
 - Marketplace-aware endpoints, currencies, and locales
 - Amazon request ID, rate-limit, duration, and HTTP status inspection
 
@@ -88,6 +88,43 @@ npm start
 - Do not place credentials in `.env` files, source code, screenshots, URLs, or Git history.
 
 Amazon's current standard SP-API connection flow uses Login with Amazon credentials. AWS access keys and an IAM role ARN from older SP-API integrations are not requested by this application.
+
+
+## Sandbox and production safety
+
+The workbench starts in **Sandbox** mode. Switch to **Production** only when you intentionally want to call a live seller account.
+
+- Sandbox uses `https://sandbox.sellingpartnerapi-*.amazon.com`.
+- Production uses `https://sellingpartnerapi-*.amazon.com`.
+- The connection test now verifies both the LWA token exchange and a Sellers API `getMarketplaceParticipations` request.
+- Amazon's static sandbox returns mocked responses by matching the request parameters in the official OpenAPI model. A valid production-shaped request is not guaranteed to match a static sandbox example.
+- Production write operations still require an explicit confirmation.
+
+## Error handling and retries
+
+Every SP-API response records the HTTP status, Amazon request ID, applied rate limit when available, request duration, and retry attempt count. Failed responses also include a structured `problem` object:
+
+```json
+{
+  "code": "Unauthorized",
+  "message": "Access to requested resource is denied.",
+  "details": "...",
+  "action": "Verify the seller authorized this app and that the app has the Amazon role required by this operation/report. Reauthorize after changing roles.",
+  "retryable": false
+}
+```
+
+Transient `429`, `500`, `502`, `503`, and `504` responses are retried with bounded backoff. The client honors `Retry-After` and `x-amzn-RateLimit-Limit` when available. All SP-API calls include the current `x-amz-date` header.
+
+## Asynchronous-result verification
+
+An HTTP success response can mean that Amazon accepted a job, not that the job ultimately succeeded.
+
+- **Feeds:** submit the feed, poll **Feed status**, then use `resultFeedDocumentId` with **Feed processing report** to download and inspect record-level processing results.
+- **Reports:** wait for the report to reach `DONE`, then use **Report document**. The workbench downloads a bounded text preview of the presigned result URL.
+- **FBA inbound:** operations such as creating an inbound plan can return an `operationId`. Use **Operation status** (`GET /inbound/fba/2024-03-20/operations/{operationId}`) and inspect `operationStatus` and `operationProblems` before treating the action as completed.
+
+The workbench also preserves the special double-percent encoding required by `listPrepDetails` for MSKUs containing `%`, `+`, or `,`, and exposes the optional package/pagination parameters required by additional legacy `getLabels` scenarios.
 
 ## API references
 
