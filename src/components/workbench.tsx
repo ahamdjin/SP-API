@@ -233,15 +233,27 @@ export function Workbench() {
     }
     if (operation === "fees") {
       url = "/api/sp-api/fees";
-      payload = {
-        ...credentials,
-        marketplaceId,
-        environment,
-        ...fees,
-        currency: marketplace.currency,
-        price: Number(fees.price),
-        shipping: Number(fees.shipping),
-      };
+      payload = environment === "sandbox"
+        ? {
+            ...credentials,
+            marketplaceId,
+            environment,
+            idType: "ASIN",
+            identifier: "B00V5DG6IQ",
+            currency: "USD",
+            price: 10,
+            shipping: 10,
+            isAmazonFulfilled: false,
+          }
+        : {
+            ...credentials,
+            marketplaceId,
+            environment,
+            ...fees,
+            currency: marketplace.currency,
+            price: Number(fees.price),
+            shipping: Number(fees.shipping),
+          };
     }
 
     setIsLoading(true);
@@ -442,11 +454,13 @@ function OperationFields({
   </div>;
 
   if (operation === "fees") return <div className="operation-fields">
-    <Choice label="Lookup by" required options={["ASIN", "SKU"]} value={fees.idType} onChange={(value) => setFees((current) => ({ ...current, idType: value as "ASIN" | "SKU" }))} />
-    <Field label={fees.idType} required><input required placeholder={fees.idType === "ASIN" ? "B0XXXXXXXX" : "SELLER-SKU"} value={fees.identifier} onChange={(event) => setFees((current) => ({ ...current, identifier: event.target.value }))} /></Field>
-    <Field label={"Listing price · " + currency} required><input required min="0.01" step="0.01" type="number" placeholder="29.99" value={fees.price} onChange={(event) => setFees((current) => ({ ...current, price: event.target.value }))} /></Field>
-    <Field label={"Shipping · " + currency}><input min="0" step="0.01" type="number" value={fees.shipping} onChange={(event) => setFees((current) => ({ ...current, shipping: event.target.value }))} /></Field>
-    <Choice label="Fulfilment" required options={["FBA", "Merchant"]} value={fees.isAmazonFulfilled ? "FBA" : "Merchant"} onChange={(value) => setFees((current) => ({ ...current, isAmazonFulfilled: value === "FBA" }))} />
+    {environment === "sandbox" ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s official fee example: ASIN <strong>B00V5DG6IQ</strong>, US marketplace, $10 listing price, $10 shipping, merchant fulfilled.</span></div> : <>
+      <Choice label="Lookup by" required options={["ASIN", "SKU"]} value={fees.idType} onChange={(value) => setFees((current) => ({ ...current, idType: value as "ASIN" | "SKU" }))} />
+      <Field label={fees.idType} required><input required placeholder={fees.idType === "ASIN" ? "B0XXXXXXXX" : "SELLER-SKU"} value={fees.identifier} onChange={(event) => setFees((current) => ({ ...current, identifier: event.target.value }))} /></Field>
+      <Field label={"Listing price · " + currency} required><input required min="0.01" step="0.01" type="number" placeholder="29.99" value={fees.price} onChange={(event) => setFees((current) => ({ ...current, price: event.target.value }))} /></Field>
+      <Field label={"Shipping · " + currency}><input min="0" step="0.01" type="number" value={fees.shipping} onChange={(event) => setFees((current) => ({ ...current, shipping: event.target.value }))} /></Field>
+      <Choice label="Fulfilment" required options={["FBA", "Merchant"]} value={fees.isAmazonFulfilled ? "FBA" : "Merchant"} onChange={(value) => setFees((current) => ({ ...current, isAmazonFulfilled: value === "FBA" }))} />
+    </>}
   </div>;
 
   const value = (key: string) => String(fields[key] ?? "");
@@ -457,13 +471,17 @@ function OperationFields({
   let content: React.ReactNode;
   switch (operation) {
     case "inventory":
-      content = <>{textarea("sellerSkus", "Seller SKUs", "Optional · one SKU per line or comma-separated")}{date("startDateTime", "Changed since")}{text("inventoryNextToken", "Next-page token", "Optional · from the previous response")}<CheckField label="Include quantity details" checked={Boolean(fields.details)} onChange={(checked) => updateField("details", checked)} /></>;
+      content = <>{environment === "sandbox" && <div className="dataset-note"><Check size={15} /><span>FBA Inventory uses Amazon&apos;s <strong>dynamic Sandbox</strong>, not a fixed static response. It returns inventory currently created in your Sandbox inventory state; an empty result is valid until Sandbox inventory has been seeded.</span></div>}{textarea("sellerSkus", "Seller SKUs", "Optional · one SKU per line or comma-separated")}{date("startDateTime", "Changed since")}{text("inventoryNextToken", "Next-page token", "Optional · from the previous response")}<CheckField label="Include quantity details" checked={Boolean(fields.details)} onChange={(checked) => updateField("details", checked)} /></>;
       break;
     case "orders":
-      content = <>{date("createdAfter", "Created after", true)}{date("createdBefore", "Created before")}{text("statuses", "Order statuses", "UNSHIPPED,SHIPPED")}{text("fulfilledBy", "Fulfilled by", "AMAZON or MERCHANT")}{text("pageSize", "Results per page", "50")}{text("orderPaginationToken", "Next-page token", "Optional · from the previous response")}<div className="dataset-note"><Check size={15} /><span>Requests all Orders 2026 data groups, including buyer, recipient, payment, tax, packages, fulfilment, promotions, proceeds, expenses, cancellations, and order items.</span></div></>;
+      content = environment === "sandbox"
+        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s Orders 2026 Japan fixture created after <strong>2024-12-25T00:00:00Z</strong>.</span></div>
+        : <>{date("createdAfter", "Created after", true)}{date("createdBefore", "Created before")}{text("statuses", "Order statuses", "UNSHIPPED,SHIPPED")}{text("fulfilledBy", "Fulfilled by", "AMAZON or MERCHANT")}{text("pageSize", "Results per page", "50")}{text("orderPaginationToken", "Next-page token", "Optional · from the previous response")}<div className="dataset-note"><Check size={15} /><span>Requests all Orders 2026 data groups, including buyer, recipient, payment, tax, packages, fulfilment, promotions, proceeds, expenses, cancellations, and order items.</span></div></>;
       break;
     case "order":
-      content = text("orderId", "Amazon order ID", "114-1234567-1234567", true);
+      content = environment === "sandbox"
+        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically opens Amazon&apos;s Orders 2026 example <strong>171-9876543-2109876</strong>.</span></div>
+        : text("orderId", "Amazon order ID", "114-1234567-1234567", true);
       break;
     case "reports":
       content = environment === "sandbox"
@@ -854,8 +872,8 @@ function OperationResult({
     const orders = arrayRecords(data.orders);
     return <div className="workflow-results">
       <SuccessLead title={String(orders.length) + " order" + (orders.length === 1 ? "" : "s") + " returned"} copy="Open an order to inspect the full Amazon response." />
-      <RecordList records={orders} idKey="amazonOrderId" titleKey="amazonOrderId" statusKey="orderStatus" onOpen={(record) => {
-        const orderId = stringValue(record.amazonOrderId) || stringValue(record.orderId);
+      <RecordList records={orders} idKey="orderId" titleKey="orderId" statusKey="orderStatus" onOpen={(record) => {
+        const orderId = stringValue(record.orderId) || stringValue(record.amazonOrderId);
         if (orderId) onFollow("order", { orderId });
       }} actionLabel="Open order" />
       {orders.length === 0 && <ResultDetails rows={genericRows} />}
@@ -882,9 +900,17 @@ function OperationResult({
   }
 
   if (operation === "order") {
+    const order = isRecord(data.order) ? data.order : data;
+    const orderId = stringValue(order.orderId) || stringFieldValue(fields, "orderId");
+    const fulfillment = isRecord(order.fulfillment) ? order.fulfillment : {};
+    const items = arrayRecords(order.orderItems);
     return <div className="workflow-results">
-      <SuccessLead title="Order returned" copy={nextStep || "Amazon returned the requested order."} />
-      <ResultDetails rows={genericRows} />
+      <StatusHero label="Amazon order" status={stringValue(fulfillment.fulfillmentStatus) || "RETURNED"} id={orderId} />
+      <ResultDetails rows={topLevelRows(order)} />
+      {items.length > 0 && <CompactTable records={items.map((item) => {
+        const product = isRecord(item.product) ? item.product : {};
+        return { orderItemId: item.orderItemId, quantityOrdered: item.quantityOrdered, asin: product.asin, sellerSku: product.sellerSku, title: product.title };
+      })} preferredKeys={["orderItemId", "asin", "sellerSku", "quantityOrdered", "title"]} />}
     </div>;
   }
 
