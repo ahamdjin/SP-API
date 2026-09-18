@@ -132,6 +132,16 @@ export async function POST(request: Request) {
       }
 
       case "feeds": {
+        if (input.environment === "sandbox") {
+          const params = new URLSearchParams({
+            feedTypes: "POST_PRODUCT_DATA",
+            processingStatuses: "CANCELLED,DONE",
+            pageSize: "10",
+          });
+          result = await call(input, "/feeds/2021-06-30/feeds?" + params);
+          break;
+        }
+
         const nextToken = optionalString(fields, "feedNextToken");
         const params = nextToken
           ? new URLSearchParams({ nextToken })
@@ -150,17 +160,24 @@ export async function POST(request: Request) {
         break;
       }
 
-      case "feed":
-        result = await call(input, "/feeds/2021-06-30/feeds/" + encodeURIComponent(stringField(fields, "feedId")));
+      case "feed": {
+        const feedId = input.environment === "sandbox" ? "feedId1" : stringField(fields, "feedId");
+        result = await call(input, "/feeds/2021-06-30/feeds/" + encodeURIComponent(feedId));
         break;
+      }
 
-      case "feedDocument":
+      case "feedDocument": {
+        const feedDocumentId = input.environment === "sandbox"
+          ? "0356cf79-b8b0-4226-b4b9-0ee058ea5760"
+          : stringField(fields, "feedDocumentId");
+        const suffix = input.environment === "sandbox" ? "" : "?enableContentEncodingUrlHeader=true";
         result = await getAndDownloadDocument(
           input,
-          "/feeds/2021-06-30/documents/" + encodeURIComponent(stringField(fields, "feedDocumentId")) + "?enableContentEncodingUrlHeader=true",
+          "/feeds/2021-06-30/documents/" + encodeURIComponent(feedDocumentId) + suffix,
           "feed processing report",
         );
         break;
+      }
 
       case "submitFeed":
         requireConfirmation(fields);
@@ -282,6 +299,35 @@ function call(input: Input, path: string, method: "GET" | "POST" = "GET", body?:
 }
 
 async function submitFeed(input: Input, fields: Fields) {
+  if (input.environment === "sandbox") {
+    const document = await call(input, "/feeds/2021-06-30/documents", "POST", {
+      contentType: "text/tab-separated-values; charset=UTF-8",
+    });
+    if (!document.ok) return document;
+
+    const documentData = record(document.data);
+    const feedDocumentId = typeof documentData.feedDocumentId === "string"
+      ? documentData.feedDocumentId
+      : "3d4e42b5-1d6e-44e8-a89c-2abfca0625bb";
+
+    const created = await call(input, "/feeds/2021-06-30/feeds", "POST", {
+      feedType: "POST_PRODUCT_DATA",
+      marketplaceIds: ["ATVPDKIKX0DER", "A1F83G8C2ARO7P"],
+      inputFeedDocumentId: feedDocumentId,
+    });
+
+    if (!created.ok) return created;
+    return {
+      ...created,
+      data: {
+        ...record(created.data),
+        inputFeedDocumentId: feedDocumentId,
+        sandboxFixture: true,
+        nextStep: "Amazon static Sandbox returns feedId 3485934 for createFeed, but getFeed uses a separate feedId1 fixture. Use the workbench's Check feed status action; it switches to the correct status fixture automatically.",
+      },
+    };
+  }
+
   const contentType = optionalString(fields, "contentType") || "text/tab-separated-values; charset=UTF-8";
   const document = await call(input, "/feeds/2021-06-30/documents", "POST", { contentType });
   if (!document.ok) return document;
@@ -298,26 +344,21 @@ async function submitFeed(input: Input, fields: Fields) {
     throw new SpApiError("Feed content is limited to 5 MB in this workbench", 413, null, "FEED_TOO_LARGE");
   }
 
-  // The static sandbox returns mock document URLs and does not represent a real
-  // production upload target. Skip the external PUT there and continue testing
-  // the SP-API request flow with the returned mock document ID.
-  if (input.environment === "production") {
-    const uploadUrl = safeAmazonDocumentUrl(url, "feed upload");
-    const upload = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "content-type": contentType },
-      body: content,
-      cache: "no-store",
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!upload.ok) {
-      throw new SpApiError(
-        `Amazon feed document upload failed with HTTP ${upload.status}`,
-        upload.status,
-        { statusText: upload.statusText },
-        "FEED_DOCUMENT_UPLOAD_FAILED",
-      );
-    }
+  const uploadUrl = safeAmazonDocumentUrl(url, "feed upload");
+  const upload = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "content-type": contentType },
+    body: content,
+    cache: "no-store",
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!upload.ok) {
+    throw new SpApiError(
+      `Amazon feed document upload failed with HTTP ${upload.status}`,
+      upload.status,
+      { statusText: upload.statusText },
+      "FEED_DOCUMENT_UPLOAD_FAILED",
+    );
   }
 
   const created = await call(input, "/feeds/2021-06-30/feeds", "POST", {
@@ -333,7 +374,6 @@ async function submitFeed(input: Input, fields: Fields) {
       ...record(created.data),
       inputFeedDocumentId: feedDocumentId,
       verification: "Poll Feed status until DONE or FATAL. When DONE, use resultFeedDocumentId with Feed processing report to inspect record-level errors.",
-      sandboxUploadSkipped: input.environment === "sandbox",
     },
   };
 }
