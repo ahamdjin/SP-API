@@ -8,6 +8,8 @@ import {
   Clipboard,
   ClipboardList,
   Database,
+  Download,
+  ExternalLink,
   Eye,
   EyeOff,
   FileBarChart,
@@ -19,9 +21,11 @@ import {
   PackagePlus,
   PackageSearch,
   ReceiptText,
+  RefreshCw,
   Search,
   Send,
   ShieldCheck,
+  ArrowRight,
   ShoppingCart,
   Tags,
   TerminalSquare,
@@ -177,7 +181,6 @@ export function Workbench() {
   const catalogItems = useMemo(() => extractCatalogItems(result?.data), [result]);
   const catalogFamily = useMemo(() => extractCatalogFamily(result), [result]);
   const feeSummary = useMemo(() => extractFeeSummary(result), [result]);
-  const nextStep = useMemo(() => result?.ok && isRecord(result.data) && typeof result.data.nextStep === "string" ? result.data.nextStep : "", [result]);
   const credentialsComplete = Object.values(credentials).every((value) => value.trim().length > 0);
   const activeItem = operationGroups.flatMap((group) => group.items).find((item) => item.id === operation)!;
   const ActiveIcon = activeItem.icon;
@@ -192,6 +195,13 @@ export function Workbench() {
 
   function updateField(key: string, value: FieldValue) {
     setFields((current) => ({ ...current, [key]: value }));
+  }
+
+  function followOperation(nextOperation: Operation, patch: Record<string, FieldValue> = {}) {
+    setFields((current) => ({ ...current, ...patch, confirmed: false }));
+    setOperation(nextOperation);
+    setResult(null);
+    window.setTimeout(() => document.querySelector(".request-form")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   }
 
   async function testConnection() {
@@ -359,7 +369,7 @@ export function Workbench() {
               {catalogItems.length === 0 ? <p className="no-results">Amazon returned no catalogue items.</p> : <CatalogProductView key={catalogItems.map((item) => item.asin).join("|")} items={catalogItems} />}
             </div>}
             {result?.ok && operation === "fees" && feeSummary && <FeeResult summary={feeSummary} />}
-            {result?.ok && operation !== "catalog" && operation !== "fees" && <div className="success-summary"><Check size={18} /><div><strong>Amazon returned a successful response</strong><p>{nextStep || "The complete response is available below."}</p></div></div>}
+            {result?.ok && operation !== "catalog" && operation !== "fees" && <OperationResult environment={environment} operation={operation} result={result} fields={fields} onFollow={followOperation} />}
           </div>
         </section>
 
@@ -635,6 +645,370 @@ function DetailTable({ rows }: { rows: DetailRow[] }) {
 type FeeSummary = { status: string; amount: number | null; currency: string; details: Array<{ type: string; amount: number | null; currency: string }> };
 function FeeResult({ summary }: { summary: FeeSummary }) {
   return <div className="fee-result"><div className="fee-total"><span>Total estimated fees</span><strong>{summary.amount === null ? "—" : formatMoney(summary.amount, summary.currency)}</strong><small>{summary.status}</small></div><div className="fee-breakdown">{summary.details.length === 0 ? <p>No itemized fee components were returned.</p> : summary.details.map((detail, index) => <div className="fee-line" key={detail.type + "-" + index}><span>{detail.type}</span><strong>{detail.amount === null ? "—" : formatMoney(detail.amount, detail.currency)}</strong></div>)}</div></div>;
+}
+
+
+type FollowOperation = (operation: Operation, patch?: Record<string, FieldValue>) => void;
+type ResultRow = { label: string; value: string };
+
+function OperationResult({
+  operation, result, environment, fields, onFollow,
+}: {
+  operation: Operation;
+  result: ApiResult;
+  environment: SpApiEnvironment;
+  fields: Record<string, FieldValue>;
+  onFollow: FollowOperation;
+}) {
+  const data = isRecord(result.data) ? result.data : {};
+  const nextStep = stringValue(data.nextStep) || stringValue(data.verification);
+  const documents = extractDocuments(data);
+  const genericRows = topLevelRows(data);
+
+  if (operation === "reportDocument" || operation === "feedDocument" || operation === "itemLabels" || operation === "shipmentLabels" || operation === "billOfLading") {
+    return <div className="workflow-results">
+      <SuccessLead title={operation === "feedDocument" ? "Processing report ready" : "Document response ready"} copy={nextStep || (documents.length ? "Amazon returned document information below." : "Amazon completed the document request.")} />
+      <DocumentResults documents={documents} environment={environment} />
+      {documents.length === 0 && <ResultDetails rows={genericRows} />}
+    </div>;
+  }
+
+  if (operation === "createReport") {
+    const reportId = stringValue(data.reportId);
+    return <div className="workflow-results">
+      <SuccessLead title="Report requested" copy={nextStep || "Amazon accepted the report request. The report document is created only after processing reaches DONE."} />
+      <ResultDetails rows={[{ label: "Report ID", value: reportId || "Not returned" }]} />
+      {reportId && <ActionRow>
+        <button className="workflow-action primary" type="button" onClick={() => onFollow("report", { reportId })}><RefreshCw size={15} /> Check report status</button>
+        {environment === "sandbox" && <button className="workflow-action" type="button" onClick={() => onFollow("reportDocument", { reportDocumentId: "0356cf79-b8b0-4226-b4b9-0ee058ea5760" })}><Download size={15} /> Open sandbox document example</button>}
+      </ActionRow>}
+      {environment === "sandbox" && <SandboxFlowNote>Amazon&apos;s static Report fixtures are independent: <code>ID323</code> stays IN_PROGRESS, while the document fixture uses <code>0356cf79-b8b0-4226-b4b9-0ee058ea5760</code>. Production chains the real report ID to its real document ID.</SandboxFlowNote>}
+    </div>;
+  }
+
+  if (operation === "report") {
+    const reportId = stringValue(data.reportId) || stringFieldValue(fields, "reportId");
+    const status = stringValue(data.processingStatus) || "UNKNOWN";
+    const documentId = stringValue(data.reportDocumentId);
+    return <div className="workflow-results">
+      <StatusHero label="Report status" status={status} id={reportId} />
+      <ResultDetails rows={rowsFrom(data, ["reportType", "dataStartTime", "dataEndTime", "createdTime", "processingStartTime", "processingEndTime", "reportDocumentId"])} />
+      <ActionRow>
+        {(status === "IN_QUEUE" || status === "IN_PROGRESS") && reportId && <button className="workflow-action primary" type="button" onClick={() => onFollow("report", { reportId })}><RefreshCw size={15} /> Check again</button>}
+        {documentId && <button className="workflow-action primary" type="button" onClick={() => onFollow("reportDocument", { reportDocumentId: documentId })}><Download size={15} /> Get report document</button>}
+        {environment === "sandbox" && !documentId && <button className="workflow-action" type="button" onClick={() => onFollow("reportDocument", { reportDocumentId: "0356cf79-b8b0-4226-b4b9-0ee058ea5760" })}><Download size={15} /> Open sandbox document fixture</button>}
+      </ActionRow>
+      {nextStep && <WorkflowNote>{nextStep}</WorkflowNote>}
+    </div>;
+  }
+
+  if (operation === "reports") {
+    const reports = arrayRecords(data.reports);
+    return <div className="workflow-results">
+      <SuccessLead title={String(reports.length) + " report job" + (reports.length === 1 ? "" : "s") + " returned"} copy="Pick a report to inspect its current processing state. DONE reports can expose a document ID." />
+      <RecordList records={reports} idKey="reportId" titleKey="reportType" statusKey="processingStatus" onOpen={(record) => {
+        const reportId = stringValue(record.reportId);
+        if (reportId) onFollow("report", { reportId });
+      }} actionLabel="Open status" />
+      {reports.length === 0 && <ResultDetails rows={genericRows} />}
+    </div>;
+  }
+
+  if (operation === "submitFeed") {
+    const feedId = stringValue(data.feedId);
+    return <div className="workflow-results">
+      <SuccessLead title="Feed submitted" copy={nextStep || "Amazon accepted the feed. Processing happens asynchronously."} />
+      <ResultDetails rows={rowsFrom(data, ["feedId", "inputFeedDocumentId", "createdTime"])} />
+      {feedId && <ActionRow><button className="workflow-action primary" type="button" onClick={() => onFollow("feed", { feedId })}><RefreshCw size={15} /> Check feed status</button></ActionRow>}
+    </div>;
+  }
+
+  if (operation === "feed") {
+    const feedId = stringValue(data.feedId) || stringFieldValue(fields, "feedId");
+    const status = stringValue(data.processingStatus) || "UNKNOWN";
+    const documentId = stringValue(data.resultFeedDocumentId);
+    return <div className="workflow-results">
+      <StatusHero label="Feed status" status={status} id={feedId} />
+      <ResultDetails rows={rowsFrom(data, ["feedType", "createdTime", "processingStartTime", "processingEndTime", "resultFeedDocumentId"])} />
+      <ActionRow>
+        {(status === "IN_QUEUE" || status === "IN_PROGRESS") && feedId && <button className="workflow-action primary" type="button" onClick={() => onFollow("feed", { feedId })}><RefreshCw size={15} /> Check again</button>}
+        {documentId && <button className="workflow-action primary" type="button" onClick={() => onFollow("feedDocument", { feedDocumentId: documentId })}><FileSearch size={15} /> Open processing report</button>}
+      </ActionRow>
+      {nextStep && <WorkflowNote>{nextStep}</WorkflowNote>}
+    </div>;
+  }
+
+  if (operation === "feeds") {
+    const feeds = arrayRecords(data.feeds);
+    return <div className="workflow-results">
+      <SuccessLead title={String(feeds.length) + " feed job" + (feeds.length === 1 ? "" : "s") + " returned"} copy="Open a feed to inspect processing and its result document." />
+      <RecordList records={feeds} idKey="feedId" titleKey="feedType" statusKey="processingStatus" onOpen={(record) => {
+        const feedId = stringValue(record.feedId);
+        if (feedId) onFollow("feed", { feedId });
+      }} actionLabel="Open status" />
+      {feeds.length === 0 && <ResultDetails rows={genericRows} />}
+    </div>;
+  }
+
+  if (operation === "createInboundPlan") {
+    const inboundPlanId = stringValue(data.inboundPlanId);
+    const operationId = stringValue(data.operationId);
+    return <div className="workflow-results">
+      <SuccessLead title="Inbound plan creation started" copy={nextStep || "Amazon returned both the plan ID and asynchronous operation ID."} />
+      <ResultDetails rows={rowsFrom(data, ["inboundPlanId", "operationId"])} />
+      <ActionRow>
+        {operationId && <button className="workflow-action primary" type="button" onClick={() => onFollow("inboundOperationStatus", { operationId, ...(inboundPlanId ? { inboundPlanId } : {}) })}><RefreshCw size={15} /> Check operation status</button>}
+        {inboundPlanId && <button className="workflow-action" type="button" onClick={() => onFollow("inboundPlan", { inboundPlanId })}><ArrowRight size={15} /> Open inbound plan</button>}
+      </ActionRow>
+    </div>;
+  }
+
+  if (operation === "inboundOperationStatus") {
+    const status = stringValue(data.operationStatus) || "UNKNOWN";
+    const operationId = stringFieldValue(fields, "operationId");
+    return <div className="workflow-results">
+      <StatusHero label="Inbound operation" status={status} id={operationId} />
+      <ResultDetails rows={rowsFrom(data, ["operationStatus"])} />
+      {Array.isArray(data.operationProblems) && data.operationProblems.length > 0 && <pre className="document-preview"><code>{JSON.stringify(data.operationProblems, null, 2)}</code></pre>}
+      <ActionRow>
+        {status === "IN_PROGRESS" && operationId && <button className="workflow-action primary" type="button" onClick={() => onFollow("inboundOperationStatus", { operationId })}><RefreshCw size={15} /> Check again</button>}
+        {status === "SUCCESS" && stringFieldValue(fields, "inboundPlanId") && <button className="workflow-action primary" type="button" onClick={() => onFollow("inboundPlan", { inboundPlanId: stringFieldValue(fields, "inboundPlanId") })}><ArrowRight size={15} /> Open inbound plan</button>}
+      </ActionRow>
+      {nextStep && <WorkflowNote>{nextStep}</WorkflowNote>}
+    </div>;
+  }
+
+  if (operation === "inboundPlans") {
+    const plans = arrayRecords(data.inboundPlans);
+    return <div className="workflow-results">
+      <SuccessLead title={String(plans.length) + " inbound plan" + (plans.length === 1 ? "" : "s") + " returned"} copy="Open a plan to inspect its shipments and current state." />
+      <RecordList records={plans} idKey="inboundPlanId" titleKey="name" statusKey="status" onOpen={(record) => {
+        const inboundPlanId = stringValue(record.inboundPlanId);
+        if (inboundPlanId) onFollow("inboundPlan", { inboundPlanId });
+      }} actionLabel="Open plan" />
+      {plans.length === 0 && <ResultDetails rows={genericRows} />}
+    </div>;
+  }
+
+  if (operation === "inboundPlan") {
+    const inboundPlanId = stringValue(data.inboundPlanId) || stringFieldValue(fields, "inboundPlanId");
+    const shipments = arrayRecords(data.shipments);
+    return <div className="workflow-results">
+      <StatusHero label={stringValue(data.name) || "Inbound plan"} status={stringValue(data.status) || "UNKNOWN"} id={inboundPlanId} />
+      <ResultDetails rows={rowsFrom(data, ["createdAt", "lastUpdatedAt", "marketplaceIds"])} />
+      {shipments.length > 0 && <RecordList records={shipments} idKey="shipmentId" titleKey="name" statusKey="status" onOpen={(record) => {
+        const shipmentId = stringValue(record.shipmentId);
+        if (shipmentId && inboundPlanId) onFollow("inboundShipment", { inboundPlanId, shipmentId });
+      }} actionLabel="Open shipment" />}
+    </div>;
+  }
+
+  if (operation === "orders") {
+    const orders = arrayRecords(data.orders);
+    return <div className="workflow-results">
+      <SuccessLead title={String(orders.length) + " order" + (orders.length === 1 ? "" : "s") + " returned"} copy="Open an order to inspect the full Amazon response." />
+      <RecordList records={orders} idKey="amazonOrderId" titleKey="amazonOrderId" statusKey="orderStatus" onOpen={(record) => {
+        const orderId = stringValue(record.amazonOrderId) || stringValue(record.orderId);
+        if (orderId) onFollow("order", { orderId });
+      }} actionLabel="Open order" />
+      {orders.length === 0 && <ResultDetails rows={genericRows} />}
+    </div>;
+  }
+
+  if (operation === "inventory") {
+    const inventory = arrayRecords(data.inventorySummaries);
+    return <div className="workflow-results">
+      <SuccessLead title={String(inventory.length) + " inventory record" + (inventory.length === 1 ? "" : "s") + " returned"} copy="Current FBA inventory summaries from Amazon." />
+      <CompactTable records={inventory} preferredKeys={["sellerSku", "asin", "fnSku", "condition", "totalQuantity"]} />
+      {inventory.length === 0 && <ResultDetails rows={genericRows} />}
+    </div>;
+  }
+
+  if (operation === "prepDetails") {
+    const prep = arrayRecords(data.mskuPrepDetails);
+    const items = prep.length ? prep : arrayRecords(data.items);
+    return <div className="workflow-results">
+      <SuccessLead title={String(items.length) + " prep record" + (items.length === 1 ? "" : "s") + " returned"} copy="Prep instructions returned by Amazon." />
+      <CompactTable records={items} preferredKeys={["msku", "asin", "fnsku", "prepCategory", "prepTypes"]} />
+      {items.length === 0 && <ResultDetails rows={genericRows} />}
+    </div>;
+  }
+
+  if (operation === "order" || operation === "inboundShipment") {
+    return <div className="workflow-results">
+      <SuccessLead title={operation === "order" ? "Order returned" : "Shipment returned"} copy={nextStep || "Amazon returned the requested resource."} />
+      <ResultDetails rows={genericRows} />
+    </div>;
+  }
+
+  return <div className="workflow-results">
+    <SuccessLead title="Amazon returned a successful response" copy={nextStep || "The most useful fields are shown below. The full JSON remains available in the Response inspector."} />
+    {documents.length > 0 && <DocumentResults documents={documents} environment={environment} />}
+    <ResultDetails rows={genericRows} />
+  </div>;
+}
+
+function SuccessLead({ title, copy }: { title: string; copy: string }) {
+  return <div className="success-summary"><Check size={18} /><div><strong>{title}</strong><p>{copy}</p></div></div>;
+}
+
+function StatusHero({ label, status, id }: { label: string; status: string; id?: string }) {
+  const normalized = status.toUpperCase();
+  const className = normalized === "DONE" || normalized === "SUCCESS" || normalized === "ACTIVE" ? "good" : normalized === "FATAL" || normalized === "FAILED" || normalized === "CANCELLED" ? "bad" : "pending";
+  return <div className="status-hero"><div><span>{label}</span><strong>{status}</strong></div>{id && <code>{id}</code>}<span className={"status-pill " + className}>{status}</span></div>;
+}
+
+function ResultDetails({ rows }: { rows: ResultRow[] }) {
+  if (!rows.length) return null;
+  return <dl className="workflow-details">{rows.map((row) => <div key={row.label}><dt>{row.label}</dt><dd>{row.value}</dd></div>)}</dl>;
+}
+
+function ActionRow({ children }: { children: React.ReactNode }) {
+  return <div className="workflow-actions">{children}</div>;
+}
+
+function WorkflowNote({ children }: { children: React.ReactNode }) {
+  return <div className="workflow-note"><FileSearch size={16} /><p>{children}</p></div>;
+}
+
+function SandboxFlowNote({ children }: { children: React.ReactNode }) {
+  return <div className="sandbox-flow-note"><ShieldCheck size={16} /><p>{children}</p></div>;
+}
+
+function RecordList({
+  records, idKey, titleKey, statusKey, onOpen, actionLabel,
+}: {
+  records: Record<string, unknown>[];
+  idKey: string;
+  titleKey: string;
+  statusKey: string;
+  onOpen: (record: Record<string, unknown>) => void;
+  actionLabel: string;
+}) {
+  if (!records.length) return null;
+  return <div className="record-list">{records.map((record, index) => {
+    const id = displayValue(record[idKey]) || "Record " + String(index + 1);
+    const title = displayValue(record[titleKey]) || id;
+    const status = displayValue(record[statusKey]);
+    return <article key={id + "-" + String(index)}><div><small>{status || "Amazon record"}</small><strong>{title}</strong>{title !== id && <code>{id}</code>}</div><button className="workflow-action" type="button" onClick={() => onOpen(record)}>{actionLabel}<ArrowRight size={14} /></button></article>;
+  })}</div>;
+}
+
+function CompactTable({ records, preferredKeys }: { records: Record<string, unknown>[]; preferredKeys: string[] }) {
+  if (!records.length) return null;
+  const keys = preferredKeys.filter((key) => records.some((record) => record[key] !== undefined)).slice(0, 5);
+  const columns = keys.length ? keys : Object.keys(records[0]).filter((key) => isScalar(records[0][key])).slice(0, 5);
+  return <div className="compact-table-wrap"><table className="compact-table"><thead><tr>{columns.map((key) => <th key={key}>{formatLabel(key)}</th>)}</tr></thead><tbody>{records.map((record, index) => <tr key={index}>{columns.map((key) => <td key={key}>{displayValue(record[key]) || "—"}</td>)}</tr>)}</tbody></table></div>;
+}
+
+type DocumentView = {
+  label: string;
+  url: string;
+  contentType: string;
+  content: string;
+  bytesRead: number | null;
+  truncated: boolean;
+};
+
+function DocumentResults({ documents, environment }: { documents: DocumentView[]; environment: SpApiEnvironment }) {
+  if (!documents.length) return <div className="workflow-note"><FileSearch size={16} /><p>Amazon returned no downloadable document URL in this response.</p></div>;
+  return <div className="document-results">{documents.map((document, index) => {
+    const href = safeDocumentHref(document.url);
+    return <article className="document-card" key={document.url + "-" + String(index)}>
+      <div className="document-card-heading"><div><span>{"Document " + String(index + 1)}</span><strong>{document.label}</strong></div>{document.contentType && <code>{document.contentType}</code>}</div>
+      <div className="document-meta">{document.bytesRead !== null && <span>{new Intl.NumberFormat().format(document.bytesRead)} bytes read</span>}{document.truncated && <span>Preview truncated</span>}{environment === "sandbox" && !document.content && <span>Static sandbox may return a mock URL rather than a real file.</span>}</div>
+      {href ? <a className="workflow-action primary document-download" href={href} target="_blank" rel="noreferrer"><Download size={15} /> Open / download original <ExternalLink size={13} /></a> : <p className="document-unavailable">Amazon returned a non-HTTPS or placeholder document URL, so the workbench will not open it.</p>}
+      {document.content && <pre className="document-preview"><code>{document.content}</code></pre>}
+    </article>;
+  })}</div>;
+}
+
+function extractDocuments(data: Record<string, unknown>): DocumentView[] {
+  const output: DocumentView[] = [];
+  const downloaded = isRecord(data.downloaded) ? data.downloaded : {};
+  const directUrl = stringValue(data.url);
+  if (directUrl) {
+    output.push({
+      label: stringValue(data.reportDocumentId) || stringValue(data.feedDocumentId) || "Amazon document",
+      url: directUrl,
+      contentType: stringValue(downloaded.contentType),
+      content: stringValue(downloaded.content),
+      bytesRead: numberValue(downloaded.bytesRead),
+      truncated: downloaded.truncated === true,
+    });
+  }
+
+  if (Array.isArray(data.documentDownloads)) {
+    data.documentDownloads.filter(isRecord).forEach((document, index) => {
+      const url = stringValue(document.uri);
+      if (!url) return;
+      output.push({
+        label: "Amazon label file " + String(index + 1),
+        url,
+        contentType: "",
+        content: "",
+        bytesRead: null,
+        truncated: false,
+      });
+    });
+  }
+
+  const payload = isRecord(data.payload) ? data.payload : {};
+  const legacyUrl = stringValue(payload.DownloadURL) || stringValue(payload.downloadURL) || stringValue(payload.downloadUrl);
+  if (legacyUrl) {
+    output.push({
+      label: "Amazon generated document",
+      url: legacyUrl,
+      contentType: "",
+      content: "",
+      bytesRead: null,
+      truncated: false,
+    });
+  }
+  return output;
+}
+
+function safeDocumentHref(value: string) {
+  if (!value) return "";
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+function topLevelRows(data: Record<string, unknown>) {
+  return Object.entries(data)
+    .filter(([key, value]) => key !== "downloaded" && key !== "nextStep" && key !== "verification" && isScalar(value))
+    .slice(0, 14)
+    .map(([key, value]) => ({ label: formatLabel(key), value: displayValue(value) }));
+}
+
+function rowsFrom(data: Record<string, unknown>, keys: string[]) {
+  return keys.flatMap((key) => {
+    const value = displayValue(data[key]);
+    return value ? [{ label: formatLabel(key), value }] : [];
+  });
+}
+
+function arrayRecords(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+
+function isScalar(value: unknown) {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === null || (Array.isArray(value) && value.every((item) => ["string", "number", "boolean"].includes(typeof item)));
+}
+
+function displayValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value) && value.every((item) => ["string", "number", "boolean"].includes(typeof item))) return value.join(", ");
+  return "";
+}
+
+function stringFieldValue(fields: Record<string, FieldValue>, key: string) {
+  return typeof fields[key] === "string" ? fields[key] as string : "";
 }
 
 async function postJson(url: string, payload: unknown): Promise<ApiResult> {
