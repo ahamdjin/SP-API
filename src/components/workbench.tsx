@@ -44,6 +44,7 @@ type ApiProblem = {
 };
 type ApiResult = {
   ok?: boolean; status?: number; statusText?: string; requestId?: string | null;
+  gatewayId?: string | null; traceId?: string | null;
   rateLimit?: string | null; durationMs?: number; attempts?: number; data?: unknown; error?: string;
   details?: unknown; message?: string; expiresIn?: number; problem?: ApiProblem | null;
 };
@@ -351,7 +352,7 @@ export function Workbench() {
             </div>
             {!result && !isLoading && <div className="empty-state"><Braces size={24} /><p>Run the selected operation to inspect Amazon&apos;s response.</p></div>}
             {isLoading && <div className="empty-state loading-state"><LoaderCircle className="spin" size={24} /><p>Waiting for Amazon…</p></div>}
-            {result && !result.ok && <div className="error-banner"><X size={18} /><div><strong>{result.problem?.code ? "Request failed · " + result.problem.code : "Request failed"}</strong><p>{result.problem?.message ?? result.error ?? extractAmazonError(result.data)}</p>{result.problem?.details && <p><strong>Details:</strong> {result.problem.details}</p>}{result.problem?.action && <p><strong>What to do:</strong> {result.problem.action}</p>}{result.requestId && <p><strong>Amazon request ID:</strong> <code>{result.requestId}</code></p>}</div></div>}
+            {result && !result.ok && <div className="error-banner"><X size={18} /><div><strong>{result.problem?.code ? "Request failed · " + result.problem.code : "Request failed"}</strong><p>{result.problem?.message ?? result.error ?? extractAmazonError(result.data)}</p>{result.problem?.details && <p><strong>Details:</strong> {result.problem.details}</p>}{result.problem?.action && <p><strong>What to do:</strong> {result.problem.action}</p>}{result.problem && <p><strong>Automatic retry:</strong> {result.problem.retryable ? "Safe with backoff." : "Not recommended until the cause/state is verified."}</p>}{result.requestId && <p><strong>Amazon request ID:</strong> <code>{result.requestId}</code></p>}{!result.requestId && result.gatewayId && <p><strong>Amazon gateway ID:</strong> <code>{result.gatewayId}</code></p>}</div></div>}
             {result?.ok && operation === "catalog" && <div className="catalog-results">
               {catalogFamily && <div className={"family-summary " + (catalogFamily.complete ? "complete" : "partial")}><strong>{catalogFamily.returnedCount} of {catalogFamily.requestedCount} related records returned</strong><span>{catalogFamily.complete ? "Complete variation and package relationship graph" : "Partial related set — see warnings in the JSON response"}</span></div>}
               {catalogItems.length === 0 ? <p className="no-results">Amazon returned no catalogue items.</p> : <CatalogProductView key={catalogItems.map((item) => item.asin).join("|")} items={catalogItems} />}
