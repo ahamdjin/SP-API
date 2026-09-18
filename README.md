@@ -114,7 +114,7 @@ Every SP-API response records the HTTP status, Amazon request ID, applied rate l
 }
 ```
 
-Transient `429`, `500`, `502`, `503`, and `504` responses are retried with bounded backoff. The client honors `Retry-After` and `x-amzn-RateLimit-Limit` when available. All SP-API calls include the current `x-amz-date` header.
+Transient errors use method-aware retry rules. HTTP `429` is retried with bounded backoff and the client honors `Retry-After` / `x-amzn-RateLimit-Limit` when available. Read-only GET calls can also retry transient `500`, `502`, `503`, `504`, timeout, and network failures. Write calls are **not** automatically replayed after ambiguous server/network failures because the original write may already have reached Amazon; the workbench tells you to verify the related resource/job state before resubmitting. All SP-API calls include the current `x-amz-date` header.
 
 ## Asynchronous-result verification
 
