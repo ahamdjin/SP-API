@@ -43,6 +43,7 @@ export class SpApiError extends Error {
   }
 }
 
+// Exchanges the seller refresh token for the short-lived LWA access token used by SP-API.
 export async function getAccessToken(credentials: Credentials) {
   const { response } = await fetchWithRetry("https://api.amazon.com/auth/o2/token", () => ({
     method: "POST",
@@ -78,6 +79,7 @@ export async function getAccessToken(credentials: Credentials) {
   };
 }
 
+// Main SP-API HTTP transport: selects the regional endpoint, adds auth headers, sends the request, and captures Amazon metadata.
 export async function callSpApi({
   credentials,
   marketplaceId,
@@ -142,6 +144,7 @@ export async function callSpApi({
   };
 }
 
+// Normalizes validation, Amazon, and local failures into the response shape shown by the workbench.
 export function toErrorResponse(error: unknown) {
   if (error instanceof ZodError) {
     const message = error.issues[0]?.message ?? "Invalid request";
@@ -219,6 +222,7 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
+// Central retry wrapper. Reads may retry transient failures; ambiguous writes are never blindly replayed.
 async function fetchWithRetry(url: string, initFactory: () => RequestInit, retryMode: RetryMode) {
   const maxAttempts = 4;
   let response: Response | null = null;
@@ -324,6 +328,7 @@ function toAmazonDate(date: Date) {
   return date.toISOString().replace(/[:-]|\.\d{3}/g, "");
 }
 
+// Turns Amazon/LWA error details into concise operator guidance and retry advice.
 function buildProblem({
   status,
   statusText,
