@@ -23,6 +23,7 @@ export const catalogRequestSchema = baseRequestSchema.extend({
   classificationIds: z.string().trim().optional().default(""),
   pageSize: z.coerce.number().int().min(1).max(20).optional().default(20),
   pageToken: z.string().trim().optional().default(""),
+  includedData: z.string().trim().optional().default("attributes,classifications,dimensions,identifiers,images,productTypes,relationships,salesRanks,summaries,vendorDetails"),
 }).superRefine((value, context) => {
   if (value.mode === "identifier" && value.identifierType === "SKU" && !value.sellerId) {
     context.addIssue({ code: "custom", path: ["sellerId"], message: "Seller ID is required for SKU searches" });
@@ -39,6 +40,9 @@ export const feesRequestSchema = baseRequestSchema.extend({
   shipping: z.coerce.number().min(0, "Shipping cannot be negative").default(0),
   currency: z.string().trim().length(3, "Use a three-letter currency code"),
   isAmazonFulfilled: z.boolean(),
+  requestIdentifier: z.string().trim().optional().default(""),
+  pointsNumber: z.coerce.number().int().min(0).optional(),
+  pointsAmount: z.coerce.number().min(0).optional(),
 });
 
 export const operationRequestSchema = baseRequestSchema.extend({

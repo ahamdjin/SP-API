@@ -342,8 +342,18 @@ export function Workbench() {
     classificationIds: "",
     pageSize: "20",
     pageToken: "",
+    includedData: "attributes,classifications,dimensions,identifiers,images,productTypes,relationships,salesRanks,summaries,vendorDetails",
   });
-  const [fees, setFees] = useState({ idType: "ASIN" as "ASIN" | "SKU", identifier: "", price: "", shipping: "0", isAmazonFulfilled: true });
+  const [fees, setFees] = useState({
+    idType: "ASIN" as "ASIN" | "SKU",
+    identifier: "",
+    price: "",
+    shipping: "0",
+    isAmazonFulfilled: true,
+    requestIdentifier: "",
+    pointsNumber: "",
+    pointsAmount: "",
+  });
 
   const marketplace = useMemo(() => getMarketplace(marketplaceId) ?? marketplaces[0], [marketplaceId]);
   const catalogItems = useMemo(() => extractCatalogItems(result?.data), [result]);
@@ -410,40 +420,21 @@ export function Workbench() {
     let payload: unknown = { ...credentials, marketplaceId, environment, operation, fields };
     if (operation === "catalog") {
       url = "/api/sp-api/catalog";
-      payload = environment === "sandbox"
-        ? {
-            ...credentials,
-            marketplaceId,
-            environment,
-            ...catalog,
-            identifierType: "ASIN",
-            query: catalog.mode === "keywords" ? "samsung,tv" : "B07N4M94X4",
-          }
-        : { ...credentials, marketplaceId, environment, ...catalog };
+      payload = { ...credentials, marketplaceId, environment, ...catalog };
     }
     if (operation === "fees") {
       url = "/api/sp-api/fees";
-      payload = environment === "sandbox"
-        ? {
-            ...credentials,
-            marketplaceId,
-            environment,
-            idType: "ASIN",
-            identifier: "B00V5DG6IQ",
-            currency: "USD",
-            price: 10,
-            shipping: 10,
-            isAmazonFulfilled: false,
-          }
-        : {
-            ...credentials,
-            marketplaceId,
-            environment,
-            ...fees,
-            currency: marketplace.currency,
-            price: Number(fees.price),
-            shipping: Number(fees.shipping),
-          };
+      payload = {
+        ...credentials,
+        marketplaceId,
+        environment,
+        ...fees,
+        currency: marketplace.currency,
+        price: Number(fees.price),
+        shipping: Number(fees.shipping),
+        pointsNumber: fees.pointsNumber === "" ? undefined : Number(fees.pointsNumber),
+        pointsAmount: fees.pointsAmount === "" ? undefined : Number(fees.pointsAmount),
+      };
     }
 
     setIsLoading(true);
@@ -505,7 +496,7 @@ export function Workbench() {
             </Field>
             <div className={"security-note " + (environment === "production" ? "production-warning" : "")}>
               <ShieldCheck size={16} />
-              <p>{environment === "sandbox" ? "Sandbox calls use Amazon's mock/test endpoints and do not change production seller data." : "Production mode calls the live seller account. Keep write confirmations enabled and test the same workflow in Sandbox first."}</p>
+              <p>{environment === "sandbox" ? "Sandbox calls use Amazon's test endpoints. Static Sandbox examples require exact values; the workbench shows those values but never silently replaces what you enter." : "Production mode calls the live seller account. Keep write confirmations enabled and test the same workflow in Sandbox first."}</p>
             </div>
           </div>
           <button className="secondary-button full-width" type="submit" disabled={!credentialsComplete || connectionState === "testing"}>
@@ -656,8 +647,18 @@ type CatalogState = {
   classificationIds: string;
   pageSize: string;
   pageToken: string;
+  includedData: string;
 };
-type FeesState = { idType: "ASIN" | "SKU"; identifier: string; price: string; shipping: string; isAmazonFulfilled: boolean };
+type FeesState = {
+  idType: "ASIN" | "SKU";
+  identifier: string;
+  price: string;
+  shipping: string;
+  isAmazonFulfilled: boolean;
+  requestIdentifier: string;
+  pointsNumber: string;
+  pointsAmount: string;
+};
 
 function OperationFields({
   environment, operation, fields, updateField, catalog, setCatalog, fees, setFees, currency,
@@ -672,144 +673,144 @@ function OperationFields({
   setFees: React.Dispatch<React.SetStateAction<FeesState>>;
   currency: string;
 }) {
+  const sandboxGuide = environment === "sandbox" ? <SandboxGuide operation={operation} catalogMode={catalog.mode} /> : null;
+
   if (operation === "catalog") return <div className="operation-fields">
+    {sandboxGuide}
     <Choice label="Search mode" required options={["identifier", "keywords"]} value={catalog.mode} onChange={(value) => setCatalog((current) => ({ ...current, mode: value as "identifier" | "keywords", pageToken: "" }))} />
-    {environment === "sandbox" ? <div className="dataset-note"><Check size={15} /><span>{catalog.mode === "keywords" ? <>Static Sandbox automatically uses Amazon&apos;s <strong>samsung + tv</strong> keyword example.</> : <>Static Sandbox automatically uses Amazon&apos;s US product example <strong>B07N4M94X4</strong>.</>}</span></div> : <>
-      {catalog.mode === "identifier" && <Choice label="Identifier type" required options={["ASIN", "UPC", "EAN", "GTIN", "ISBN", "SKU", "JAN", "MINSAN"]} value={catalog.identifierType} onChange={(value) => setCatalog((current) => ({ ...current, identifierType: value, pageToken: "" }))} />}
-      <Field label={catalog.mode === "keywords" ? "Search terms" : "Product identifier(s)"} required><input required placeholder={catalog.mode === "keywords" ? "wireless barcode scanner" : "One value, or up to 20 separated by commas"} value={catalog.query} onChange={(event) => setCatalog((current) => ({ ...current, query: event.target.value, pageToken: "" }))} /></Field>
-      {catalog.identifierType === "SKU" && catalog.mode === "identifier" && <Field label="Seller ID" required requirement="Required for SKU"><input required placeholder="A1XXXXXXXXXXXX" value={catalog.sellerId} onChange={(event) => setCatalog((current) => ({ ...current, sellerId: event.target.value }))} /></Field>}
-      {catalog.mode === "identifier" && catalog.identifierType === "ASIN" && <CheckField label="Fetch every related variation and package ASIN for one ASIN" checked={catalog.includeVariations} onChange={(checked) => setCatalog((current) => ({ ...current, includeVariations: checked }))} />}
-      {catalog.mode === "keywords" && <>
-        <Field label="Brand names"><input placeholder="Optional · Samsung, Apple" value={catalog.brandNames} onChange={(event) => setCatalog((current) => ({ ...current, brandNames: event.target.value, pageToken: "" }))} /></Field>
-        <Field label="Classification IDs"><input placeholder="Optional · comma-separated" value={catalog.classificationIds} onChange={(event) => setCatalog((current) => ({ ...current, classificationIds: event.target.value, pageToken: "" }))} /></Field>
-        <Field label="Results per page"><input max="20" min="1" type="number" value={catalog.pageSize} onChange={(event) => setCatalog((current) => ({ ...current, pageSize: event.target.value, pageToken: "" }))} /></Field>
-        <Field label="Next-page token"><input placeholder="From the previous response" value={catalog.pageToken} onChange={(event) => setCatalog((current) => ({ ...current, pageToken: event.target.value }))} /></Field>
-      </>}
-      <div className="dataset-note"><Check size={15} /><span>Requests attributes, classifications, dimensions, identifiers, images, product types, relationships, sales ranks, summaries, and vendor details.</span></div>
+    {catalog.mode === "identifier" && <Choice label="Identifier type" required options={["ASIN", "UPC", "EAN", "GTIN", "ISBN", "SKU", "JAN", "MINSAN"]} value={catalog.identifierType} onChange={(value) => setCatalog((current) => ({ ...current, identifierType: value, pageToken: "" }))} />}
+    <Field label={catalog.mode === "keywords" ? "Search terms" : "Product identifier(s)"} required><input required placeholder={catalog.mode === "keywords" ? "wireless barcode scanner" : "One value, or up to 20 separated by commas"} value={catalog.query} onChange={(event) => setCatalog((current) => ({ ...current, query: event.target.value, pageToken: "" }))} /></Field>
+    {catalog.identifierType === "SKU" && catalog.mode === "identifier" && <Field label="Seller ID" required requirement="Required for SKU"><input required placeholder="A1XXXXXXXXXXXX" value={catalog.sellerId} onChange={(event) => setCatalog((current) => ({ ...current, sellerId: event.target.value }))} /></Field>}
+    <Field label="Included data" required><textarea required rows={3} placeholder="attributes,classifications,dimensions,identifiers,images,productTypes,relationships,salesRanks,summaries,vendorDetails" value={catalog.includedData} onChange={(event) => setCatalog((current) => ({ ...current, includedData: event.target.value }))} /></Field>
+    {catalog.mode === "identifier" && catalog.identifierType === "ASIN" && <CheckField label="Fetch every related variation and package ASIN for one ASIN" checked={catalog.includeVariations} onChange={(checked) => setCatalog((current) => ({ ...current, includeVariations: checked }))} />}
+    {catalog.mode === "keywords" && <>
+      <Field label="Brand names"><input placeholder="Optional · Samsung, Apple" value={catalog.brandNames} onChange={(event) => setCatalog((current) => ({ ...current, brandNames: event.target.value, pageToken: "" }))} /></Field>
+      <Field label="Classification IDs"><input placeholder="Optional · comma-separated" value={catalog.classificationIds} onChange={(event) => setCatalog((current) => ({ ...current, classificationIds: event.target.value, pageToken: "" }))} /></Field>
+      <Field label="Results per page"><input max="20" min="1" type="number" value={catalog.pageSize} onChange={(event) => setCatalog((current) => ({ ...current, pageSize: event.target.value, pageToken: "" }))} /></Field>
+      <Field label="Next-page token"><input placeholder="From the previous response" value={catalog.pageToken} onChange={(event) => setCatalog((current) => ({ ...current, pageToken: event.target.value }))} /></Field>
     </>}
+    <div className="dataset-note"><Check size={15} /><span>The values shown here are the values sent. Sandbox does not replace the ASIN, keywords, marketplace, or datasets behind the scenes.</span></div>
   </div>;
 
   if (operation === "fees") return <div className="operation-fields">
-    {environment === "sandbox" ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s official fee example: ASIN <strong>B00V5DG6IQ</strong>, US marketplace, $10 listing price, $10 shipping, merchant fulfilled.</span></div> : <>
-      <Choice label="Lookup by" required options={["ASIN", "SKU"]} value={fees.idType} onChange={(value) => setFees((current) => ({ ...current, idType: value as "ASIN" | "SKU" }))} />
-      <Field label={fees.idType} required><input required placeholder={fees.idType === "ASIN" ? "B0XXXXXXXX" : "SELLER-SKU"} value={fees.identifier} onChange={(event) => setFees((current) => ({ ...current, identifier: event.target.value }))} /></Field>
-      <Field label={"Listing price · " + currency} required><input required min="0.01" step="0.01" type="number" placeholder="29.99" value={fees.price} onChange={(event) => setFees((current) => ({ ...current, price: event.target.value }))} /></Field>
-      <Field label={"Shipping · " + currency}><input min="0" step="0.01" type="number" value={fees.shipping} onChange={(event) => setFees((current) => ({ ...current, shipping: event.target.value }))} /></Field>
-      <Choice label="Fulfilment" required options={["FBA", "Merchant"]} value={fees.isAmazonFulfilled ? "FBA" : "Merchant"} onChange={(value) => setFees((current) => ({ ...current, isAmazonFulfilled: value === "FBA" }))} />
-    </>}
+    {sandboxGuide}
+    <Choice label="Lookup by" required options={["ASIN", "SKU"]} value={fees.idType} onChange={(value) => setFees((current) => ({ ...current, idType: value as "ASIN" | "SKU" }))} />
+    <Field label={fees.idType} required><input required placeholder={fees.idType === "ASIN" ? "B0XXXXXXXX" : "SELLER-SKU"} value={fees.identifier} onChange={(event) => setFees((current) => ({ ...current, identifier: event.target.value }))} /></Field>
+    <Field label={"Listing price · " + currency} required><input required min="0.01" step="0.01" type="number" placeholder="29.99" value={fees.price} onChange={(event) => setFees((current) => ({ ...current, price: event.target.value }))} /></Field>
+    <Field label={"Shipping · " + currency}><input min="0" step="0.01" type="number" value={fees.shipping} onChange={(event) => setFees((current) => ({ ...current, shipping: event.target.value }))} /></Field>
+    <Choice label="Fulfilment" required options={["FBA", "Merchant"]} value={fees.isAmazonFulfilled ? "FBA" : "Merchant"} onChange={(value) => setFees((current) => ({ ...current, isAmazonFulfilled: value === "FBA" }))} />
+    <Field label="Request identifier"><input placeholder="Optional in Production · Sandbox example uses UmaS1" value={fees.requestIdentifier} onChange={(event) => setFees((current) => ({ ...current, requestIdentifier: event.target.value }))} /></Field>
+    <Field label="Points number"><input min="0" step="1" type="number" placeholder="Optional · Sandbox example uses 0" value={fees.pointsNumber} onChange={(event) => setFees((current) => ({ ...current, pointsNumber: event.target.value }))} /></Field>
+    <Field label={"Points monetary value · " + currency}><input min="0" step="0.01" type="number" placeholder="Optional · Sandbox example uses 0" value={fees.pointsAmount} onChange={(event) => setFees((current) => ({ ...current, pointsAmount: event.target.value }))} /></Field>
   </div>;
 
   const value = (key: string) => String(fields[key] ?? "");
   const text = (key: string, label: string, placeholder = "", required = false, requirement?: string) => <Field label={label} required={required} requirement={requirement}><input required={required} placeholder={placeholder} value={value(key)} onChange={(event) => updateField(key, event.target.value)} /></Field>;
-  const date = (key: string, label: string, required = false) => <Field label={label} required={required}><input required={required} type="datetime-local" value={value(key)} onChange={(event) => updateField(key, event.target.value)} /></Field>;
+  const date = (key: string, label: string, required = false) => <Field label={label} required={required}><input required={required} placeholder="ISO 8601 · 2026-09-01T00:00:00Z" value={value(key)} onChange={(event) => updateField(key, event.target.value)} /></Field>;
   const textarea = (key: string, label: string, placeholder = "", required = false) => <Field label={label} required={required}><textarea required={required} placeholder={placeholder} rows={5} value={value(key)} onChange={(event) => updateField(key, event.target.value)} /></Field>;
 
   let content: React.ReactNode;
   switch (operation) {
     case "inventory":
-      content = <>{environment === "sandbox" && <div className="dataset-note"><Check size={15} /><span>FBA Inventory uses Amazon&apos;s <strong>dynamic Sandbox</strong>, not a fixed static response. It returns inventory currently created in your Sandbox inventory state; an empty result is valid until Sandbox inventory has been seeded.</span></div>}{textarea("sellerSkus", "Seller SKUs", "Optional · one SKU per line or comma-separated")}{date("startDateTime", "Changed since")}{text("inventoryNextToken", "Next-page token", "Optional · from the previous response")}<CheckField label="Include quantity details" checked={Boolean(fields.details)} onChange={(checked) => updateField("details", checked)} /></>;
+      content = <>{sandboxGuide}{textarea("sellerSkus", "Seller SKUs", "Optional · one SKU per line or comma-separated")}{date("startDateTime", "Changed since")}{text("inventoryNextToken", "Next-page token", "Optional · from the previous response")}<CheckField label="Include quantity details" checked={Boolean(fields.details)} onChange={(checked) => updateField("details", checked)} /></>;
       break;
     case "orders":
-      content = environment === "sandbox"
-        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s Orders 2026 Japan fixture created after <strong>2024-12-25T00:00:00Z</strong>.</span></div>
-        : <>{date("createdAfter", "Created after", true)}{date("createdBefore", "Created before")}{text("statuses", "Order statuses", "UNSHIPPED,SHIPPED")}{text("fulfilledBy", "Fulfilled by", "AMAZON or MERCHANT")}{text("pageSize", "Results per page", "50")}{text("orderPaginationToken", "Next-page token", "Optional · from the previous response")}<CheckField label="Include buyer + recipient PII (requires the appropriate Orders roles)" checked={Boolean(fields.includeOrderPii)} onChange={(checked) => updateField("includeOrderPii", checked)} /><div className="dataset-note"><Check size={15} /><span>Core order data includes payment, tax, packages, fulfilment, promotions, proceeds, expenses, cancellations, fulfilment orders, and order items. Buyer/recipient data is opt-in to avoid role-related Production failures.</span></div></>;
+      content = <>{sandboxGuide}{date("createdAfter", "Created after", true)}{date("createdBefore", "Created before")}{text("statuses", "Order statuses", "Optional · UNSHIPPED,SHIPPED")}{text("fulfilledBy", "Fulfilled by", "Optional · AMAZON or MERCHANT")}{text("pageSize", "Results per page", "Optional")}{text("orderPaginationToken", "Next-page token", "Optional · from the previous response")}{text("orderIncludedData", "Included data override", "Optional · comma-separated Amazon Orders datasets")}<CheckField label="Include buyer + recipient PII when no override is supplied" checked={Boolean(fields.includeOrderPii)} onChange={(checked) => updateField("includeOrderPii", checked)} /><div className="dataset-note"><Check size={15} /><span>Included-data override is sent exactly as entered. Leave it blank in Production to use the safe core dataset selection.</span></div></>;
       break;
     case "order":
-      content = environment === "sandbox"
-        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically opens Amazon&apos;s Orders 2026 example <strong>171-9876543-2109876</strong>.</span></div>
-        : <>{text("orderId", "Amazon order ID", "114-1234567-1234567", true)}<CheckField label="Include buyer + recipient PII (requires the appropriate Orders roles)" checked={Boolean(fields.includeOrderPii)} onChange={(checked) => updateField("includeOrderPii", checked)} /></>;
+      content = <>{sandboxGuide}{text("orderId", "Amazon order ID", "114-1234567-1234567", true)}{text("orderIncludedData", "Included data override", "Optional · comma-separated Amazon Orders datasets")}<CheckField label="Include buyer + recipient PII when no override is supplied" checked={Boolean(fields.includeOrderPii)} onChange={(checked) => updateField("includeOrderPii", checked)} /></>;
       break;
     case "reports":
-      content = environment === "sandbox"
-        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox uses Amazon&apos;s fixed list-reports fixture: FEE_DISCOUNTS_REPORT + GET_AFN_INVENTORY_DATA with IN_QUEUE + IN_PROGRESS. The workbench sends those exact parameters automatically.</span></div>
-        : <>{text("reportTypes", "Report type(s)", "Optional · e.g. GET_MERCHANT_LISTINGS_ALL_DATA")}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("reportNextToken", "Next-page token", "Optional · from the previous response")}</>;
+      content = <>{sandboxGuide}{text("reportTypes", "Report type(s)", "Optional · e.g. GET_MERCHANT_LISTINGS_ALL_DATA")}{text("processingStatuses", "Processing statuses", "Optional · DONE,IN_PROGRESS")}{text("reportMarketplaceIds", "Marketplace IDs", "Optional · comma-separated; leave blank for no marketplace filter")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "Optional")}{text("reportNextToken", "Next-page token", "Optional · token must be used alone")}</>;
       break;
     case "createReport":
-      content = environment === "sandbox"
-        ? <><div className="dataset-note"><Check size={15} /><span>Static Sandbox uses Amazon&apos;s official create-report fixture automatically: GET_MERCHANT_LISTINGS_ALL_DATA, start 2024-03-10T20:11:24.000Z, marketplaces Germany + US. A successful response returns report ID ID323.</span></div><Confirmation fields={fields} updateField={updateField} label="I understand this sends Amazon&apos;s fixed Sandbox report request." /></>
-        : <>{text("reportType", "Report type", "GET_MERCHANT_LISTINGS_ALL_DATA", true)}{date("dataStartTime", "Data start")}{date("dataEndTime", "Data end")}<Confirmation fields={fields} updateField={updateField} label="I understand this starts a report job in Amazon." /></>;
+      content = <>{sandboxGuide}{text("reportType", "Report type", "GET_MERCHANT_LISTINGS_ALL_DATA", true)}{text("reportMarketplaceIds", "Marketplace IDs", "Optional · defaults to selected marketplace; comma-separated")}{date("dataStartTime", "Data start")}{date("dataEndTime", "Data end")}<Confirmation fields={fields} updateField={updateField} label="I understand this starts a report job using exactly the values above." /></>;
       break;
     case "report":
-      content = environment === "sandbox"
-        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses report ID <strong>ID323</strong>. Amazon&apos;s fixture returns an IN_PROGRESS example.</span></div>
-        : text("reportId", "Report ID", "51665019712", true);
+      content = <>{sandboxGuide}{text("reportId", "Report ID", "51665019712", true)}</>;
       break;
     case "reportDocument":
-      content = environment === "sandbox"
-        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses report document <strong>0356cf79-b8b0-4226-b4b9-0ee058ea5760</strong> and attempts to preview the sample file.</span></div>
-        : text("reportDocumentId", "Report document ID", "amzn1.spdoc...", true);
+      content = <>{sandboxGuide}{text("reportDocumentId", "Report document ID", "amzn1.spdoc...", true)}</>;
       break;
     case "feeds":
-      content = environment === "sandbox"
-        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s POST_PRODUCT_DATA / CANCELLED,DONE list fixture.</span></div>
-        : <>{text("feedTypes", "Feed type(s)", "Optional · e.g. JSON_LISTINGS_FEED")}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("feedNextToken", "Next-page token", "Optional · from the previous response")}</>;
+      content = <>{sandboxGuide}{text("feedTypes", "Feed type(s)", "Optional · e.g. JSON_LISTINGS_FEED")}{text("processingStatuses", "Processing statuses", "Optional · DONE,IN_PROGRESS")}{text("feedMarketplaceIds", "Marketplace IDs", "Optional · comma-separated; leave blank for no marketplace filter")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "Optional")}{text("feedNextToken", "Next-page token", "Optional · token must be used alone")}</>;
       break;
     case "feed":
-      content = environment === "sandbox"
-        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses <strong>feedId1</strong>. Amazon&apos;s fixture intentionally returns CANCELLED.</span></div>
-        : text("feedId", "Feed ID", "123456789", true);
+      content = <>{sandboxGuide}{text("feedId", "Feed ID", "123456789", true)}</>;
       break;
     case "feedDocument":
-      content = environment === "sandbox"
-        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses document <strong>0356cf79-b8b0-4226-b4b9-0ee058ea5760</strong> and previews the sample processing report.</span></div>
-        : <>{text("feedDocumentId", "Result feed document ID", "Use resultFeedDocumentId returned after the feed is DONE", true)}<div className="dataset-note"><Check size={15} /><span>Downloads a safe 2 MB text preview of Amazon&apos;s processing report so record-level errors are visible.</span></div></>;
+      content = <>{sandboxGuide}{text("feedDocumentId", "Result feed document ID", "Use resultFeedDocumentId returned after the feed is DONE", true)}<div className="dataset-note"><Check size={15} /><span>Downloads a safe 2 MB text preview when the document URL is readable.</span></div></>;
       break;
     case "submitFeed":
-      content = environment === "sandbox"
-        ? <><div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s official POST_PRODUCT_DATA feed fixture. No real file is uploaded and no production listing is changed.</span></div><Confirmation fields={fields} updateField={updateField} label="I understand this runs Amazon's fixed Sandbox feed example." /></>
-        : <>{text("feedType", "Feed type", "JSON_LISTINGS_FEED", true)}{text("contentType", "Content type", "Defaults to application/json; charset=UTF-8")}{textarea("content", "Feed content", "Paste the complete JSON listings feed payload", true)}<div className="dataset-note"><Check size={15} /><span>For JSON_LISTINGS_FEED the workbench validates JSON syntax plus header.sellerId, header.version, messages, messageId, SKU and operationType before uploading anything to Amazon.</span></div><Confirmation fields={fields} updateField={updateField} label="I understand this uploads data and starts a feed in Amazon." /></>;
+      content = <>{sandboxGuide}{text("feedType", "Feed type", "JSON_LISTINGS_FEED", true)}{text("feedMarketplaceIds", "Marketplace IDs", "Optional · defaults to selected marketplace; comma-separated")}{text("contentType", "Content type", "application/json; charset=UTF-8", true)}{textarea("content", "Feed content", "Paste the feed payload", true)}<div className="dataset-note"><Check size={15} /><span>Production uploads this content to Amazon. Static Sandbox validates the create-document/create-feed fixture but does not persist a real upload.</span></div><Confirmation fields={fields} updateField={updateField} label="I understand this uses exactly the feed values above." /></>;
       break;
     case "inboundPlans":
-      content = <><Choice label="Plan status" options={["ACTIVE", "SHIPPED", "VOIDED"]} value={value("status")} onChange={(next) => updateField("status", next)} /><Choice label="Sort by" options={["LAST_UPDATED_TIME", "CREATION_TIME"]} value={value("sortBy")} onChange={(next) => updateField("sortBy", next)} /><Choice label="Sort order" options={["DESC", "ASC"]} value={value("sortOrder")} onChange={(next) => updateField("sortOrder", next)} />{text("pageSize", "Results per page", "10")}{text("inboundPaginationToken", "Next-page token", "Optional · from the previous response")}</>;
+      content = <>{sandboxGuide}<Choice label="Plan status" options={["ACTIVE", "SHIPPED", "VOIDED"]} value={value("status")} onChange={(next) => updateField("status", next)} /><Choice label="Sort by" options={["LAST_UPDATED_TIME", "CREATION_TIME"]} value={value("sortBy")} onChange={(next) => updateField("sortBy", next)} /><Choice label="Sort order" options={["DESC", "ASC"]} value={value("sortOrder")} onChange={(next) => updateField("sortOrder", next)} />{text("pageSize", "Results per page", "Optional")}{text("inboundPaginationToken", "Next-page token", "Optional · from the previous response")}</>;
       break;
     case "inboundPlan":
-      content = environment === "sandbox"
-        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically opens <strong>wf1234abcd-1234-abcd-5678-1234abcd5678</strong>.</span></div>
-        : text("inboundPlanId", "Inbound plan ID", "wf12345678-...", true);
+      content = <>{sandboxGuide}{text("inboundPlanId", "Inbound plan ID", "wf12345678-...", true)}</>;
       break;
     case "inboundShipment":
-      content = environment === "sandbox"
-        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically opens Amazon&apos;s sample inbound plan and shipment.</span></div>
-        : <>{text("inboundPlanId", "Inbound plan ID", "wf12345678-...", true)}{text("shipmentId", "Shipment ID", "sh12345678-...", true)}</>;
+      content = <>{sandboxGuide}{text("inboundPlanId", "Inbound plan ID", "wf12345678-...", true)}{text("shipmentId", "Shipment ID", "sh12345678-...", true)}</>;
       break;
     case "inboundOperationStatus":
-      content = environment === "sandbox"
-        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically checks operation <strong>1234abcd-1234-abcd-5678-1234abcd5678</strong>, which returns SUCCESS with a warning example.</span></div>
-        : <>{text("operationId", "Operation ID", "1234abcd-1234-abcd-5678-1234abcd5678", true)}<div className="dataset-note"><Check size={15} /><span>Use the operationId returned by create/update inbound operations. SUCCESS confirms completion; inspect operationProblems for warnings or failures.</span></div></>;
+      content = <>{sandboxGuide}{text("operationId", "Operation ID", "1234abcd-1234-abcd-5678-1234abcd5678", true)}<div className="dataset-note"><Check size={15} /><span>Use the operationId returned by create/update inbound operations. SUCCESS confirms completion; inspect operationProblems for warnings or failures.</span></div></>;
       break;
     case "prepDetails":
-      content = environment === "sandbox"
-        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically requests prep details for <strong>msku1</strong> and <strong>msku2</strong>.</span></div>
-        : textarea("mskus", "Merchant SKUs", "One MSKU per line", true);
+      content = <>{sandboxGuide}{textarea("mskus", "Merchant SKUs", "One MSKU per line", true)}</>;
       break;
     case "createInboundPlan":
-      content = environment === "sandbox"
-        ? <><div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically sends Amazon&apos;s official Canada inbound-plan example and returns a sample plan ID + operation ID.</span></div><Confirmation fields={fields} updateField={updateField} label="I understand this runs Amazon's fixed Sandbox inbound-plan example." /></>
-        : <>{text("planName", "Plan name", "September replenishment")}{textarea("items", "Items", "MSKU, quantity, prep owner, label owner", true)}<div className="subsection-label">Ship-from address</div>{text("contactName", "Contact name", "Jane Smith", true)}{text("companyName", "Company")}{text("addressLine1", "Address line 1", "123 Main Street", true)}{text("addressLine2", "Address line 2")}{text("city", "City", "Toronto", true)}{text("stateOrProvinceCode", "State / province", "ON")}{text("postalCode", "Postal code", "M1M 1M1", true)}{text("countryCode", "Country code", "Defaults to marketplace country")}{text("phoneNumber", "Phone number", "+1 555 0100", true)}<Confirmation fields={fields} updateField={updateField} label="I understand this creates an inbound plan in Amazon." /></>;
+      content = <>{sandboxGuide}{text("planName", "Plan name", "September replenishment")}{text("destinationMarketplaces", "Destination marketplace IDs", "Optional · defaults to selected marketplace; comma-separated")}{textarea("items", "Items", "MSKU, quantity, prep owner, label owner[, expiration, manufacturing lot code]", true)}<div className="subsection-label">Ship-from address</div>{text("contactName", "Contact name", "Jane Smith", true)}{text("companyName", "Company")}{text("addressLine1", "Address line 1", "123 Main Street", true)}{text("addressLine2", "Address line 2")}{text("city", "City", "Toronto", true)}{text("districtOrCounty", "District / county")}{text("stateOrProvinceCode", "State / province", "ON")}{text("postalCode", "Postal code", "M1M 1M1", true)}{text("countryCode", "Country code", "Defaults to marketplace country")}{text("phoneNumber", "Phone number", "+1 555 0100", true)}{text("email", "Email")}<Confirmation fields={fields} updateField={updateField} label="I understand this creates an inbound plan using exactly the values above." /></>;
       break;
-    case "itemLabels":
-      content = environment === "sandbox"
-        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s msku1/msku2 STANDARD_FORMAT A4_21 label fixture. The returned URL is a mock and may not contain a real printable file.</span></div>
-        : <>{textarea("items", "Items", "MSKU, quantity", true)}<Choice label="Label format" required options={["STANDARD_FORMAT", "THERMAL_PRINTING"]} value={value("labelType")} onChange={(next) => updateField("labelType", next)} /><Choice label="Page type" options={["A4_21", "A4_24", "A4_24_64x33", "A4_24_66x35", "A4_24_70x36", "A4_24_70x37", "A4_24i", "A4_27", "A4_40_52x29", "A4_44_48x25", "Letter_30"]} value={value("pageType")} onChange={(next) => updateField("pageType", next)} /></>;
+    case "itemLabels": {
+      const thermal = value("labelType") === "THERMAL_PRINTING";
+      content = <>{sandboxGuide}{textarea("items", "Items", "MSKU, quantity", true)}<Choice label="Label format" required options={["STANDARD_FORMAT", "THERMAL_PRINTING"]} value={value("labelType")} onChange={(next) => updateField("labelType", next)} />{thermal ? <>{text("labelHeight", "Height", "25", true)}{text("labelWidth", "Width", "100", true)}</> : <Choice label="Page type" options={["A4_21", "A4_24", "A4_24_64x33", "A4_24_66x35", "A4_24_70x36", "A4_24_70x37", "A4_24i", "A4_27", "A4_40_52x29", "A4_44_48x25", "Letter_30"]} value={value("pageType")} onChange={(next) => updateField("pageType", next)} />}</>;
       break;
+    }
     case "shipmentLabels": {
-      if (environment === "sandbox") {
-        content = <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses shipment <strong>348975493</strong>, PackageLabel_Letter_2 and BARCODE_2D. Amazon returns a placeholder label URL rather than a real PDF.</span></div>;
-        break;
-      }
       const palletLabels = value("shipmentLabelType") === "PALLET";
-      content = <>{text("shipmentId", "Shipment ID", "FBA123456789", true)}<Choice label="Label type" required options={["UNIQUE", "BARCODE_2D", "PALLET"]} value={value("shipmentLabelType")} onChange={(next) => updateField("shipmentLabelType", next)} />{text("shipmentPageType", "Page type", "Defaults to PackageLabel_Thermal_NonPCP")}{text("numberOfPackages", "Number of packages")}{text("numberOfPallets", "Number of pallets", "", palletLabels, palletLabels ? "Required for PALLET labels" : undefined)}{textarea("packageLabelsToPrint", "Package labels to print", "Optional · one CartonId / boxId per line")}{text("shipmentPageSize", "Page size", "Required for some non-partnered LTL label flows")}{text("pageStartIndex", "Page start index", "Required for some non-partnered LTL label flows")}</>;
+      content = <>{sandboxGuide}{text("shipmentId", "Shipment ID", "FBA123456789", true)}<Choice label="Label type" required options={["UNIQUE", "BARCODE_2D", "PALLET"]} value={value("shipmentLabelType")} onChange={(next) => updateField("shipmentLabelType", next)} />{text("shipmentPageType", "Page type", "PackageLabel_Thermal_NonPCP", true)}{text("numberOfPackages", "Number of packages")}{text("numberOfPallets", "Number of pallets", "", palletLabels, palletLabels ? "Required for PALLET labels" : undefined)}{textarea("packageLabelsToPrint", "Package labels to print", "Optional · one CartonId / boxId per line")}{text("shipmentPageSize", "Page size", "Required for some non-partnered LTL label flows")}{text("pageStartIndex", "Page start index", "Required for some non-partnered LTL label flows")}</>;
       break;
     }
     case "billOfLading":
-      content = environment === "sandbox"
-        ? <div className="dataset-note"><Check size={15} /><span>Static Sandbox automatically uses Amazon&apos;s bill-of-lading fixture. Its DownloadURL is a placeholder, not a real PDF.</span></div>
-        : text("shipmentId", "Shipment ID", "FBA123456789", true);
+      content = <>{sandboxGuide}{text("shipmentId", "Shipment ID", "FBA123456789", true)}</>;
       break;
     default:
       content = null;
   }
   return <div className="operation-fields">{content}</div>;
+}
+
+function SandboxGuide({ operation, catalogMode }: { operation: Operation; catalogMode: "identifier" | "keywords" }) {
+  const guides: Partial<Record<Operation, React.ReactNode>> = {
+    catalog: catalogMode === "keywords"
+      ? <>Static example: select <strong>United States</strong>, enter keywords <code>samsung,tv</code>, and use included data <code>classifications,dimensions,identifiers,images,productTypes,relationships,salesRanks,summaries,vendorDetails</code>.</>
+      : <>Static example: select <strong>United States</strong>, choose <strong>ASIN</strong>, enter <code>B07N4M94X4</code>, use included data <code>classifications,dimensions,identifiers,images,productTypes,relationships,salesRanks,summaries,vendorDetails</code>, and turn related-variation fetching off for the exact single-item fixture.</>,
+    fees: <>Static example: select <strong>United States</strong>, ASIN <code>B00V5DG6IQ</code>, listing price <code>10</code>, shipping <code>10</code>, Merchant fulfilment, request identifier <code>UmaS1</code>, points number <code>0</code>, points value <code>0</code>.</>,
+    inventory: <>This operation uses Amazon&apos;s <strong>dynamic Sandbox</strong>. Enter the same kinds of SKUs/filters you would in Production; results depend on Sandbox inventory state.</>,
+    orders: <>Static example: select <strong>Japan</strong>, Created after <code>2024-12-25T00:00:00Z</code>, clear status/fulfilled-by/page-size, and set Included data override to <code>BUYER,RECIPIENT,PROCEEDS,EXPENSE,PROMOTION,CANCELLATION,FULFILLMENT,PACKAGES</code>.</>,
+    order: <>Static example: select <strong>Japan</strong>, Order ID <code>171-9876543-2109876</code>, and set Included data override to <code>BUYER,RECIPIENT,PROCEEDS,EXPENSE,PROMOTION,CANCELLATION,FULFILLMENT,PACKAGES</code>.</>,
+    reports: <>Static example: report types <code>FEE_DISCOUNTS_REPORT,GET_AFN_INVENTORY_DATA</code>, statuses <code>IN_QUEUE,IN_PROGRESS</code>; leave marketplace IDs, dates, page size, and token blank.</>,
+    createReport: <>Static example: report type <code>GET_MERCHANT_LISTINGS_ALL_DATA</code>, start <code>2024-03-10T20:11:24.000Z</code>, marketplace IDs <code>A1PA6795UKMFR9,ATVPDKIKX0DER</code>, and no end date.</>,
+    report: <>Static example: Report ID <code>ID323</code>. Amazon&apos;s fixture returns an IN_PROGRESS report.</>,
+    reportDocument: <>Static example: Report document ID <code>0356cf79-b8b0-4226-b4b9-0ee058ea5760</code>.</>,
+    feeds: <>Static example: feed type <code>POST_PRODUCT_DATA</code>, statuses <code>CANCELLED,DONE</code>, page size <code>10</code>; leave marketplace IDs and dates blank.</>,
+    feed: <>Static example: Feed ID <code>feedId1</code>. Amazon&apos;s fixture intentionally returns CANCELLED, which the workbench treats the same way it would in Production.</>,
+    feedDocument: <>Static example: Feed document ID <code>0356cf79-b8b0-4226-b4b9-0ee058ea5760</code>.</>,
+    submitFeed: <>Static example: feed type <code>POST_PRODUCT_DATA</code>, content type <code>text/tab-separated-values; charset=UTF-8</code>, marketplace IDs <code>ATVPDKIKX0DER,A1F83G8C2ARO7P</code>. Enter any non-empty test content; static Sandbox does not persist a real upload.</>,
+    inboundPlans: <>Static example: status <code>ACTIVE</code>, sort by <code>LAST_UPDATED_TIME</code>, sort order <code>ASC</code>, page size <code>2</code>, pagination token <code>paginationToken</code>.</>,
+    inboundPlan: <>Static example: Inbound plan ID <code>wf1234abcd-1234-abcd-5678-1234abcd5678</code>.</>,
+    inboundShipment: <>Static example: plan ID <code>wf1234abcd-1234-abcd-5678-1234abcd5678</code> and shipment ID <code>sh1234abcd-1234-abcd-5678-1234abcd5678</code>.</>,
+    inboundOperationStatus: <>Static example: Operation ID <code>1234abcd-1234-abcd-5678-1234abcd5678</code>.</>,
+    prepDetails: <>Static example: select <strong>United States</strong> and enter <code>msku1</code> and <code>msku2</code>, one per line.</>,
+    createInboundPlan: <>Static example: destination marketplace <code>A2EUQ1WTGCTBG2</code>; plan name <code>FBA (03/20/2024, 12:01 PM)</code>; item <code>msku, 2, AMAZON, AMAZON, 2024-01-01, lotCode</code>; address name <code>name</code>, company <code>Acme</code>, address <code>123 example street</code> / <code>Unit 102</code>, city <code>Toronto</code>, province <code>ON</code>, postal code <code>M1M1M1</code>, country <code>CA</code>, phone <code>1234567890</code>, email <code>email@email.com</code>.</>,
+    itemLabels: <>Static example: select <strong>United States</strong>; items <code>msku1, 1</code> and <code>msku2, 1</code>; label format <code>STANDARD_FORMAT</code>; page type <code>A4_21</code>.</>,
+    shipmentLabels: <>Static example: shipment ID <code>348975493</code>, label type <code>BARCODE_2D</code>, page type <code>PackageLabel_Letter_2</code>; leave other fields blank.</>,
+    billOfLading: <>Static example: Shipment ID <code>shipmentId</code>. The returned URL is a placeholder rather than a real Production document.</>,
+  };
+  const guide = guides[operation];
+  if (!guide) return null;
+  return <div className="sandbox-input-guide"><ShieldCheck size={16} /><div><strong>Sandbox example — nothing is auto-filled</strong><p>{guide}</p><small>Enter these values yourself. The request builder sends what is visible in the form.</small></div></div>;
 }
 
 function RequirementLegend() {
@@ -964,9 +965,7 @@ function OperationResult({
       <ResultDetails rows={[{ label: "Report ID", value: reportId || "Not returned" }]} />
       {reportId && <ActionRow>
         <button className="workflow-action primary" type="button" onClick={() => onFollow("report", { reportId })}><RefreshCw size={15} /> Check report status</button>
-        {environment === "sandbox" && <button className="workflow-action" type="button" onClick={() => onFollow("reportDocument", { reportDocumentId: "0356cf79-b8b0-4226-b4b9-0ee058ea5760" })}><Download size={15} /> Open sandbox document example</button>}
       </ActionRow>}
-      {environment === "sandbox" && <SandboxFlowNote>Amazon&apos;s static Report fixtures are independent: <code>ID323</code> stays IN_PROGRESS, while the document fixture uses <code>0356cf79-b8b0-4226-b4b9-0ee058ea5760</code>. Production chains the real report ID to its real document ID.</SandboxFlowNote>}
     </div>;
   }
 
@@ -980,7 +979,6 @@ function OperationResult({
       <ActionRow>
         {(status === "IN_QUEUE" || status === "IN_PROGRESS") && reportId && <button className="workflow-action primary" type="button" onClick={() => onFollow("report", { reportId })}><RefreshCw size={15} /> Check again</button>}
         {documentId && <button className="workflow-action primary" type="button" onClick={() => onFollow("reportDocument", { reportDocumentId: documentId })}><Download size={15} /> Get report document</button>}
-        {environment === "sandbox" && !documentId && <button className="workflow-action" type="button" onClick={() => onFollow("reportDocument", { reportDocumentId: "0356cf79-b8b0-4226-b4b9-0ee058ea5760" })}><Download size={15} /> Open sandbox document fixture</button>}
       </ActionRow>
       {nextStep && <WorkflowNote>{nextStep}</WorkflowNote>}
     </div>;
@@ -995,7 +993,7 @@ function OperationResult({
         const reportId = stringValue(record.reportId);
         if (reportId) onFollow("report", { reportId });
       }} actionLabel="Open status" />
-      {pageToken && environment === "production" && <PaginationResult token={pageToken} onNext={() => onFollow("reports", { reportNextToken: pageToken })} />}
+      {pageToken && <PaginationResult token={pageToken} onNext={() => onFollow("reports", { reportNextToken: pageToken })} />}
       {reports.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
@@ -1019,7 +1017,6 @@ function OperationResult({
       <ActionRow>
         {(status === "IN_QUEUE" || status === "IN_PROGRESS") && feedId && <button className="workflow-action primary" type="button" onClick={() => onFollow("feed", { feedId })}><RefreshCw size={15} /> Check again</button>}
         {documentId && <button className="workflow-action primary" type="button" onClick={() => onFollow("feedDocument", { feedDocumentId: documentId })}><FileSearch size={15} /> Open processing report</button>}
-        {environment === "sandbox" && !documentId && <button className="workflow-action" type="button" onClick={() => onFollow("feedDocument", { feedDocumentId: "0356cf79-b8b0-4226-b4b9-0ee058ea5760" })}><FileSearch size={15} /> Open sandbox processing report</button>}
       </ActionRow>
       {nextStep && <WorkflowNote>{nextStep}</WorkflowNote>}
     </div>;
@@ -1034,7 +1031,7 @@ function OperationResult({
         const feedId = stringValue(record.feedId);
         if (feedId) onFollow("feed", { feedId });
       }} actionLabel="Open status" />
-      {pageToken && environment === "production" && <PaginationResult token={pageToken} onNext={() => onFollow("feeds", { feedNextToken: pageToken })} />}
+      {pageToken && <PaginationResult token={pageToken} onNext={() => onFollow("feeds", { feedNextToken: pageToken })} />}
       {feeds.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
@@ -1062,7 +1059,6 @@ function OperationResult({
       <ActionRow>
         {status === "IN_PROGRESS" && operationId && <button className="workflow-action primary" type="button" onClick={() => onFollow("inboundOperationStatus", { operationId })}><RefreshCw size={15} /> Check again</button>}
         {status === "SUCCESS" && stringFieldValue(fields, "inboundPlanId") && <button className="workflow-action primary" type="button" onClick={() => onFollow("inboundPlan", { inboundPlanId: stringFieldValue(fields, "inboundPlanId") })}><ArrowRight size={15} /> Open inbound plan</button>}
-        {status === "SUCCESS" && environment === "sandbox" && !stringFieldValue(fields, "inboundPlanId") && <button className="workflow-action" type="button" onClick={() => onFollow("inboundPlan", { inboundPlanId: "wf1234abcd-1234-abcd-5678-1234abcd5678" })}><ArrowRight size={15} /> Open sandbox plan fixture</button>}
       </ActionRow>
       {nextStep && <WorkflowNote>{nextStep}</WorkflowNote>}
     </div>;
@@ -1078,7 +1074,7 @@ function OperationResult({
         const inboundPlanId = stringValue(record.inboundPlanId);
         if (inboundPlanId) onFollow("inboundPlan", { inboundPlanId });
       }} actionLabel="Open plan" />
-      {pageToken && environment === "production" && <PaginationResult token={pageToken} onNext={() => onFollow("inboundPlans", { inboundPaginationToken: pageToken })} />}
+      {pageToken && <PaginationResult token={pageToken} onNext={() => onFollow("inboundPlans", { inboundPaginationToken: pageToken })} />}
       {plans.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
@@ -1102,7 +1098,6 @@ function OperationResult({
         const shipmentId = stringValue(record.shipmentId);
         if (shipmentId && inboundPlanId) onFollow("inboundShipment", { inboundPlanId, shipmentId });
       }} actionLabel="Open shipment" />}
-      {environment === "sandbox" && shipments.length === 0 && <ActionRow><button className="workflow-action" type="button" onClick={() => onFollow("inboundShipment", { inboundPlanId: "wf1234abcd-1234-abcd-5678-1234abcd5678", shipmentId: "sh1234abcd-1234-abcd-5678-1234abcd5678" })}><ArrowRight size={15} /> Open sandbox shipment fixture</button></ActionRow>}
     </div>;
   }
 
@@ -1142,7 +1137,7 @@ function OperationResult({
         const orderId = stringValue(record.orderId) || stringValue(record.amazonOrderId);
         if (orderId) onFollow("order", { orderId });
       }} actionLabel="Open order" />
-      {pageToken && environment === "production" && <PaginationResult token={pageToken} onNext={() => onFollow("orders", { orderPaginationToken: pageToken })} />}
+      {pageToken && <PaginationResult token={pageToken} onNext={() => onFollow("orders", { orderPaginationToken: pageToken })} />}
       {orders.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
@@ -1250,10 +1245,6 @@ function PaginationResult({ token, onNext }: { token: string; onNext: () => void
 
 function WorkflowNote({ children }: { children: React.ReactNode }) {
   return <div className="workflow-note"><FileSearch size={16} /><p>{children}</p></div>;
-}
-
-function SandboxFlowNote({ children }: { children: React.ReactNode }) {
-  return <div className="sandbox-flow-note"><ShieldCheck size={16} /><p>{children}</p></div>;
 }
 
 function RecordList({
