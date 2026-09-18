@@ -182,15 +182,15 @@ Use seller-owned data from the same marketplace selected in the workbench. IDs r
 | FBA inventory | Marketplace; optional seller SKUs / changed-since time | Inventory summaries and quantities; may return a short-lived next token |
 | Search orders | Created-after time; optional created-before, statuses and fulfilment filter | Orders and next-page token; buyer/recipient PII is disabled by default |
 | Get order | `orderId` returned by Search orders | Full core order object; optionally buyer/recipient data when PII access is enabled |
-| List reports | One or more report types such as `GET_MERCHANT_LISTINGS_ALL_DATA`; optional status/time filters | Matching report jobs and next token |
+| List reports | No filter is required; optionally add report types such as `GET_MERCHANT_LISTINGS_ALL_DATA`, status, or time filters | Matching report jobs and next token |
 | Request report | Supported report type; optional start/end dates where that report type accepts them | `reportId` |
 | Report status | `reportId` | Processing status and `reportDocumentId` when DONE |
 | Report document | `reportDocumentId` | Presigned document URL plus workbench preview when text-readable |
-| List feeds | Feed type such as `JSON_LISTINGS_FEED`; optional status/time filters | Matching feed jobs and next token |
+| List feeds | No filter is required; optionally add a feed type such as `JSON_LISTINGS_FEED`, status, or time filters | Matching feed jobs and next token |
 | Feed status | `feedId` | Processing status and `resultFeedDocumentId` when Amazon produces one |
 | Feed processing report | `resultFeedDocumentId` | Presigned processing-report URL and preview |
 | Submit feed | `JSON_LISTINGS_FEED`, JSON content type, and a complete valid feed payload | `inputFeedDocumentId`, then `feedId`; the workbench validates the basic JSON feed structure before upload |
-| List inbound plans | Optional plan status/sort/page size | Inbound plans and next token |
+| List inbound plans | No filter is required; optionally add plan status/sort/page size | Inbound plans and next token |
 | Get inbound plan | `inboundPlanId` returned by List/Create plan | Plan, packing/placement options and shipment summaries |
 | Get shipment | `inboundPlanId` + `shipmentId` from the plan | Shipment destination, status, tracking/transportation data |
 | Inbound operation status | `operationId` returned by an inbound write | SUCCESS / IN_PROGRESS / FAILED and any operation problems |
