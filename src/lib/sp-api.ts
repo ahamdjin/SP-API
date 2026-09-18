@@ -39,7 +39,7 @@ export class SpApiError extends Error {
 }
 
 export async function getAccessToken(credentials: Credentials) {
-  const response = await fetch("https://api.amazon.com/auth/o2/token", {
+  const { response } = await fetchWithRetry("https://api.amazon.com/auth/o2/token", () => ({
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded;charset=UTF-8" },
     body: new URLSearchParams({
@@ -50,7 +50,7 @@ export async function getAccessToken(credentials: Credentials) {
     }),
     cache: "no-store",
     signal: AbortSignal.timeout(30_000),
-  });
+  }));
 
   const data = await readJson(response);
   if (!response.ok) {
