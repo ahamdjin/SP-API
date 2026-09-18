@@ -60,6 +60,24 @@ The old buttons are represented as follows:
 | GetLabels | Shipment labels / Item labels / Bill of lading |
 | Convert / FC bulk update | Shown as legacy database integrations |
 
+## Visual Studio one-click run
+
+The repository includes `SP-API.sln`, `SP-API.esproj`, and a Visual Studio launch profile so a Windows user can open the solution and start the app with the green **Run / F5** button.
+
+Requirements:
+
+- Visual Studio 2022 or newer with the **Node.js development** workload.
+- Node.js 24+ and npm.
+
+Use it like this:
+
+1. Double-click `SP-API.sln`.
+2. Let Visual Studio restore npm dependencies if this is the first open.
+3. Use the single visible launch target **SP-API Local** and press **Run / F5**.
+4. Visual Studio starts the Next.js development server and opens Microsoft Edge at `http://localhost:3000`.
+
+The helper server/browser launch profiles are hidden so the Start dropdown stays simple. Production verification is still done with `npm run build` and `npm start`.
+
 ## Run locally
 
 Requirements: Node.js 24+ and npm.
