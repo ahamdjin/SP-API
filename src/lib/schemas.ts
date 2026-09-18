@@ -30,4 +30,28 @@ export const feesRequestSchema = baseRequestSchema.extend({
   isAmazonFulfilled: z.boolean(),
 });
 
+export const operationRequestSchema = baseRequestSchema.extend({
+  operation: z.enum([
+    "inventory",
+    "orders",
+    "order",
+    "reports",
+    "createReport",
+    "report",
+    "reportDocument",
+    "feeds",
+    "feed",
+    "submitFeed",
+    "inboundPlans",
+    "inboundPlan",
+    "inboundShipment",
+    "prepDetails",
+    "createInboundPlan",
+    "itemLabels",
+    "shipmentLabels",
+    "billOfLading",
+  ]),
+  fields: z.record(z.string(), z.unknown()).default({}),
+});
+
 export type Credentials = z.infer<typeof credentialsSchema>;
