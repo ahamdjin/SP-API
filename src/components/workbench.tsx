@@ -969,12 +969,14 @@ function OperationResult({
 
   if (operation === "reports") {
     const reports = arrayRecords(data.reports);
+    const pageToken = stringValue(data.nextToken);
     return <div className="workflow-results">
       <SuccessLead title={String(reports.length) + " report job" + (reports.length === 1 ? "" : "s") + " returned"} copy="Pick a report to inspect its current processing state. DONE reports can expose a document ID." />
       <RecordList records={reports} idKey="reportId" titleKey="reportType" statusKey="processingStatus" onOpen={(record) => {
         const reportId = stringValue(record.reportId);
         if (reportId) onFollow("report", { reportId });
       }} actionLabel="Open status" />
+      {pageToken && environment === "production" && <PaginationResult token={pageToken} onNext={() => onFollow("reports", { reportNextToken: pageToken })} />}
       {reports.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
@@ -1006,12 +1008,14 @@ function OperationResult({
 
   if (operation === "feeds") {
     const feeds = arrayRecords(data.feeds);
+    const pageToken = stringValue(data.nextToken);
     return <div className="workflow-results">
       <SuccessLead title={String(feeds.length) + " feed job" + (feeds.length === 1 ? "" : "s") + " returned"} copy="Open a feed to inspect processing and its result document." />
       <RecordList records={feeds} idKey="feedId" titleKey="feedType" statusKey="processingStatus" onOpen={(record) => {
         const feedId = stringValue(record.feedId);
         if (feedId) onFollow("feed", { feedId });
       }} actionLabel="Open status" />
+      {pageToken && environment === "production" && <PaginationResult token={pageToken} onNext={() => onFollow("feeds", { feedNextToken: pageToken })} />}
       {feeds.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
@@ -1031,7 +1035,7 @@ function OperationResult({
 
   if (operation === "inboundOperationStatus") {
     const status = stringValue(data.operationStatus) || "UNKNOWN";
-    const operationId = stringFieldValue(fields, "operationId");
+    const operationId = stringValue(data.operationId) || stringFieldValue(fields, "operationId");
     return <div className="workflow-results">
       <StatusHero label="Inbound operation" status={status} id={operationId} />
       <ResultDetails rows={rowsFrom(data, ["operationStatus"])} />
@@ -1047,12 +1051,15 @@ function OperationResult({
 
   if (operation === "inboundPlans") {
     const plans = arrayRecords(data.inboundPlans);
+    const pagination = isRecord(data.pagination) ? data.pagination : {};
+    const pageToken = stringValue(pagination.nextToken);
     return <div className="workflow-results">
       <SuccessLead title={String(plans.length) + " inbound plan" + (plans.length === 1 ? "" : "s") + " returned"} copy="Open a plan to inspect its shipments and current state." />
       <RecordList records={plans} idKey="inboundPlanId" titleKey="name" statusKey="status" onOpen={(record) => {
         const inboundPlanId = stringValue(record.inboundPlanId);
         if (inboundPlanId) onFollow("inboundPlan", { inboundPlanId });
       }} actionLabel="Open plan" />
+      {pageToken && environment === "production" && <PaginationResult token={pageToken} onNext={() => onFollow("inboundPlans", { inboundPaginationToken: pageToken })} />}
       {plans.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
@@ -1087,6 +1094,8 @@ function OperationResult({
 
   if (operation === "orders") {
     const orders = arrayRecords(data.orders);
+    const pagination = isRecord(data.pagination) ? data.pagination : {};
+    const pageToken = stringValue(pagination.nextToken);
     const orderRows = orders.map((order) => {
       const fulfillment = isRecord(order.fulfillment) ? order.fulfillment : {};
       return { ...order, displayStatus: stringValue(fulfillment.fulfillmentStatus) || stringValue(order.orderStatus) };
@@ -1097,16 +1106,38 @@ function OperationResult({
         const orderId = stringValue(record.orderId) || stringValue(record.amazonOrderId);
         if (orderId) onFollow("order", { orderId });
       }} actionLabel="Open order" />
+      {pageToken && environment === "production" && <PaginationResult token={pageToken} onNext={() => onFollow("orders", { orderPaginationToken: pageToken })} />}
       {orders.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
 
   if (operation === "inventory") {
-    const inventory = arrayRecords(data.inventorySummaries);
+    const payload = isRecord(data.payload) ? data.payload : data;
+    const pagination = isRecord(data.pagination) ? data.pagination : {};
+    const pageToken = stringValue(pagination.nextToken);
+    const inventory = arrayRecords(payload.inventorySummaries);
+    const rows = inventory.map((record) => {
+      const details = isRecord(record.inventoryDetails) ? record.inventoryDetails : {};
+      const reserved = isRecord(details.reservedQuantity) ? details.reservedQuantity : {};
+      return {
+        sellerSku: record.sellerSku,
+        asin: record.asin,
+        fnSku: record.fnSku,
+        condition: record.condition,
+        totalQuantity: record.totalQuantity,
+        fulfillable: details.fulfillableQuantity,
+        reserved: reserved.totalReservedQuantity,
+        inboundWorking: details.inboundWorkingQuantity,
+        inboundShipped: details.inboundShippedQuantity,
+        inboundReceiving: details.inboundReceivingQuantity,
+        unfulfillable: details.unfulfillableQuantity,
+      };
+    });
     return <div className="workflow-results">
-      <SuccessLead title={String(inventory.length) + " inventory record" + (inventory.length === 1 ? "" : "s") + " returned"} copy="Current FBA inventory summaries from Amazon." />
-      <CompactTable records={inventory} preferredKeys={["sellerSku", "asin", "fnSku", "condition", "totalQuantity"]} />
-      {inventory.length === 0 && <ResultDetails rows={genericRows} />}
+      <SuccessLead title={String(inventory.length) + " inventory record" + (inventory.length === 1 ? "" : "s") + " returned"} copy="Current FBA inventory summaries from Amazon, including the quantity fields Amazon returned." />
+      <CompactTable records={rows} preferredKeys={["sellerSku", "asin", "totalQuantity", "fulfillable", "reserved", "inboundWorking", "inboundShipped", "inboundReceiving", "unfulfillable"]} maxColumns={9} />
+      {pageToken && <PaginationResult token={pageToken} onNext={() => onFollow("inventory", { inventoryNextToken: pageToken })} />}
+      {inventory.length === 0 && <ResultDetails rows={rowsFrom(payload, ["granularity"])} />}
     </div>;
   }
 
