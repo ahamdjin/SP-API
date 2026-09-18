@@ -130,6 +130,36 @@ The workbench renders the useful Amazon response fields directly in the Result p
 Amazon's **static** sandbox examples are independent fixtures, so an ID returned by one static example does not always feed into the next example. In Sandbox mode the workbench substitutes the exact fixture required by the selected follow-up operation and explains that behavior in the Result panel. Production does not do this: it passes Amazon's real returned report IDs, feed IDs, document IDs, inbound plan IDs, operation IDs, and shipment IDs into the next operation.
 
 FBA Inventory is different: Amazon currently marks `GET /fba/inventory/v1/summaries` as a **dynamic sandbox** operation. Its results depend on inventory state created in the sandbox, so an empty inventory response is valid and is not replaced with fabricated static data.
+## Response matrix
+
+Every workbench operation now has a visible request/response contract in the UI, a structured Result view, a complete returned-data block, and the raw transport envelope in the Response inspector.
+
+| Workbench operation | Amazon response data | Follow-up |
+| --- | --- | --- |
+| Catalogue item | `items[]` or an `Item` with datasets such as images, identifiers, dimensions, relationships, ranks, summaries and attributes | Use `pagination.nextToken` for additional search pages; exact ASIN mode can follow related ASINs |
+| Fee estimate | `payload.FeesEstimateResult` with status, identifier, total and `FeeDetailList` | Embedded `ClientError` / `ServiceError` is treated as a real failure |
+| FBA inventory | `payload.inventorySummaries[]` plus `pagination.nextToken` | Continue with the next token; quantity details are flattened into the Result table |
+| Search orders | `orders[]` plus `pagination.nextToken` | Open an `orderId` or continue to the next page |
+| Get order | `order` with items and any requested buyer, recipient, proceeds, payment, tax, fulfillment, packages and fulfillment-order data | Inspect the complete returned data in Result |
+| List reports | `reports[]` plus root `nextToken` | Open `reportId`; next-token calls use only `nextToken` |
+| Request report | `reportId` | Poll Report status |
+| Report status | processing state plus `reportDocumentId` when DONE | Retrieve Report document |
+| Report document | `reportDocumentId`, presigned `url`, optional compression metadata, plus the workbench download preview | Open/download the original Amazon document |
+| List feeds | `feeds[]` plus root `nextToken` | Open `feedId`; next-token calls use only `nextToken` |
+| Submit feed | feed-document creation/upload followed by `feedId` | Poll Feed status |
+| Feed status | processing state plus `resultFeedDocumentId` when available | Inspect the processing report, even after DONE |
+| Feed processing report | document metadata + presigned URL + downloaded text preview when available | Correct record-level errors before resubmitting |
+| List inbound plans | `inboundPlans[]` plus `pagination.nextToken` | Open an inbound plan or continue pagination |
+| Get inbound plan | plan metadata, source address, packing options, placement options and shipment summaries | Open a shipment |
+| Get shipment | source/destination, dates, tracking, freight, transportation, delivery and contact/appointment details | Request shipment labels or bill of lading when available |
+| Inbound operation status | `operationId`, operation name, `operationStatus`, `operationProblems[]` | Continue only after SUCCESS |
+| Prep details | `mskuPrepDetails[]` with prep categories/types and owner constraints | Use constraints in inbound-plan item data |
+| Create inbound plan | `inboundPlanId` + `operationId` | Poll operation status, then retrieve the plan |
+| Item labels | `documentDownloads[]` with `uri`, `downloadType`, and expiration | Download before the URL expires |
+| Shipment labels | legacy `payload.DownloadURL` | Open/download Amazon's generated document |
+| Bill of lading | legacy `payload.DownloadURL` | Open/download Amazon's generated document |
+
+**Three views are intentionally kept:** the tailored Result cards/tables for day-to-day use, **All returned data** for the complete Amazon data object, and **Response inspector** for the full transport envelope (`status`, request ID, rate limit, retries, timing, `problem`, and `data`).
 ## Asynchronous-result verification
 
 An HTTP success response can mean that Amazon accepted a job, not that the job ultimately succeeded.
