@@ -1,4 +1,5 @@
 import { getMarketplace } from "@/lib/marketplaces";
+import { parseCsvFields, preserveIsoInstant } from "@/lib/request-parsing";
 import { operationRequestSchema } from "@/lib/schemas";
 import { callSpApi, privateHeaders, SpApiError, toErrorResponse } from "@/lib/sp-api";
 
@@ -709,17 +710,31 @@ function booleanField(fields: Fields, key: string) {
 
 function dateField(fields: Fields, key: string) {
   const value = stringField(fields, key);
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) throw new SpApiError(key + " must be a valid date", 400, null, "INVALID_DATE");
-  return date.toISOString();
+  const parsed = preserveIsoInstant(value);
+  if (!parsed) {
+    throw new SpApiError(
+      key + " must be an ISO 8601 timestamp with an explicit timezone, for example 2026-09-18T12:00:00Z",
+      400,
+      { value },
+      "INVALID_DATE",
+    );
+  }
+  return parsed;
 }
 
 function optionalDate(fields: Fields, key: string) {
   const value = optionalString(fields, key);
   if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) throw new SpApiError(key + " must be a valid date", 400, null, "INVALID_DATE");
-  return date.toISOString();
+  const parsed = preserveIsoInstant(value);
+  if (!parsed) {
+    throw new SpApiError(
+      key + " must be an ISO 8601 timestamp with an explicit timezone, for example 2026-09-18T12:00:00Z",
+      400,
+      { value },
+      "INVALID_DATE",
+    );
+  }
+  return parsed;
 }
 
 function numberField(fields: Fields, key: string, min: number, max: number, fallback: number) {
@@ -793,16 +808,37 @@ function requireConfirmation(fields: Fields) {
 
 function parseItems(value: string, max = 2000) {
   const items = value.split(/\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
-    const [msku, quantityRaw, prepOwner = "SELLER", labelOwner = "SELLER", expiration = "", manufacturingLotCode = ""] = line.split(",").map((part) => part.trim());
+    let fields: string[];
+    try {
+      fields = parseCsvFields(line);
+    } catch (error) {
+      throw new SpApiError(
+        "Each item row must be valid CSV. Quote an MSKU if it contains a comma, for example \"SKU,WITH,COMMA\", 2, SELLER, SELLER",
+        400,
+        { line, cause: error instanceof Error ? error.message : String(error) },
+        "INVALID_ITEM_ROW",
+      );
+    }
+
+    const [msku, quantityRaw, prepOwner = "SELLER", labelOwner = "SELLER", expiration = "", manufacturingLotCode = ""] = fields;
+    if (fields.length > 6) {
+      throw new SpApiError(
+        "Each item must use: MSKU, quantity, prep owner, label owner[, expiration, manufacturing lot code]",
+        400,
+        { line },
+        "INVALID_ITEM_ROW",
+      );
+    }
+
     const quantity = Number(quantityRaw);
     if (!msku || !Number.isInteger(quantity) || quantity < 1 || quantity > 500000) {
-      throw new SpApiError("Each item must use: MSKU, quantity, prep owner, label owner[, expiration, manufacturing lot code]", 400, null, "INVALID_ITEM_ROW");
+      throw new SpApiError("Each item must use: MSKU, quantity, prep owner, label owner[, expiration, manufacturing lot code]", 400, { line }, "INVALID_ITEM_ROW");
     }
     if (!["AMAZON", "SELLER", "NONE"].includes(prepOwner)) {
-      throw new SpApiError("Prep owner must be AMAZON, SELLER, or NONE", 400, null, "INVALID_PREP_OWNER");
+      throw new SpApiError("Prep owner must be AMAZON, SELLER, or NONE", 400, { line, prepOwner }, "INVALID_PREP_OWNER");
     }
     if (!["AMAZON", "SELLER", "NONE"].includes(labelOwner)) {
-      throw new SpApiError("Label owner must be AMAZON, SELLER, or NONE", 400, null, "INVALID_LABEL_OWNER");
+      throw new SpApiError("Label owner must be AMAZON, SELLER, or NONE", 400, { line, labelOwner }, "INVALID_LABEL_OWNER");
     }
     return {
       msku,
