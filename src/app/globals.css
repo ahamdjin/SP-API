@@ -139,9 +139,12 @@ h2 { margin: 0; font-size: 15px; font-weight: 680; letter-spacing: -.01em; }
 .segmented-control.compact button { min-width: 0; flex: 1; }
 .operation-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 16px; margin: 20px 0; }
 .operation-fields > .field:has(textarea), .operation-fields > .field:has(.choice-grid), .operation-fields > .choice-grid, .operation-fields > .write-confirmation, .operation-fields > .subsection-label { grid-column: 1 / -1; }
+.operation-fields > .check-field, .operation-fields > .dataset-note { grid-column: 1 / -1; }
 .subsection-label { padding-top: 4px; color: var(--accent); font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .1em; }
 .check-field { display: flex; align-items: center; gap: 9px; color: #475467; font-size: 11px; cursor: pointer; }
 .check-field input { width: 16px; height: 16px; accent-color: var(--accent); }
+.dataset-note { display: flex; align-items: flex-start; gap: 8px; padding: 11px 12px; border: 1px solid #cfe0ff; border-radius: 8px; background: var(--accent-soft); color: #45628f; font-size: 10px; line-height: 1.5; }
+.dataset-note svg { flex: 0 0 auto; margin-top: 1px; }
 .write-confirmation { padding: 12px 14px; border: 1px solid #fedf89; border-radius: 8px; background: #fffaeb; }
 .legacy-warning, .success-summary { display: flex; align-items: flex-start; gap: 11px; margin-top: 20px; padding: 14px; border-radius: 8px; }
 .legacy-warning { border: 1px solid #d0d5dd; background: #f9fafb; color: #475467; }
@@ -163,7 +166,12 @@ h2 { margin: 0; font-size: 15px; font-weight: 680; letter-spacing: -.01em; }
 .error-banner strong { display: block; font-size: 12px; }
 .error-banner p { margin: 5px 0 0; color: #912018; font-size: 12px; line-height: 1.5; }
 
-.catalog-item { display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 18px; padding: 20px 0; border-bottom: 1px solid var(--line-soft); }
+.family-summary { margin-top: 18px; padding: 13px 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-radius: 8px; font-size: 11px; }
+.family-summary.complete { border: 1px solid #abefc6; background: #ecfdf3; color: #067647; }
+.family-summary.partial { border: 1px solid #fedf89; background: #fffaeb; color: #b54708; }
+.family-summary span { color: var(--muted); }
+.catalog-item { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 18px; padding: 20px 0; border-bottom: 1px solid var(--line-soft); }
+.product-gallery { display: grid; grid-template-columns: repeat(2, 86px); align-content: start; gap: 6px; }
 .product-image { width: 86px; height: 86px; display: grid; place-items: center; overflow: hidden; background: white; border: 1px solid var(--line); border-radius: 8px; color: var(--subtle); }
 .product-image img { width: 100%; height: 100%; object-fit: contain; }
 .product-copy { min-width: 0; }
@@ -173,6 +181,8 @@ h2 { margin: 0; font-size: 15px; font-weight: 680; letter-spacing: -.01em; }
 .product-copy p, .no-results { margin: 0; color: var(--muted); font-size: 11px; }
 .identifier-list { flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .identifier-list span { padding: 4px 6px; border-radius: 4px; background: var(--accent-soft); color: #45628f; font-family: var(--font-geist-mono), monospace; font-size: 9px; }
+.dataset-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.dataset-list span { color: var(--subtle); font-size: 8px; text-transform: uppercase; letter-spacing: .06em; }
 
 .fee-result { display: grid; grid-template-columns: minmax(190px, .8fr) 1.4fr; gap: 28px; padding: 26px 0; }
 .fee-total { display: flex; flex-direction: column; justify-content: center; min-height: 140px; padding-right: 28px; border-right: 1px solid var(--line); }
@@ -212,6 +222,10 @@ h2 { margin: 0; font-size: 15px; font-weight: 680; letter-spacing: -.01em; }
   .operation-list { grid-template-columns: 1fr; }
   .workspace-heading { align-items: flex-start; flex-direction: column; }
   .request-intro { flex-direction: column; }
+  .family-summary { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .catalog-item { grid-template-columns: 1fr; }
+  .product-gallery { grid-template-columns: repeat(3, 72px); }
+  .product-image { width: 72px; height: 72px; }
   .fee-result { grid-template-columns: 1fr; }
   .fee-total { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 24px; }
 }

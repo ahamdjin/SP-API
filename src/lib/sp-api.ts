@@ -1,3 +1,5 @@
+import "server-only";
+
 import { endpoints, getMarketplace } from "@/lib/marketplaces";
 import type { Credentials } from "@/lib/schemas";
 import { ZodError } from "zod";
@@ -59,26 +61,27 @@ export async function callSpApi({
   path,
   method = "GET",
   body,
+  accessToken,
 }: {
   credentials: Credentials;
   marketplaceId: string;
   path: string;
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: unknown;
+  accessToken?: string;
 }): Promise<AmazonResponse> {
   const marketplace = getMarketplace(marketplaceId);
   if (!marketplace) throw new SpApiError("Unsupported marketplace", 400);
 
-  const { accessToken } = await getAccessToken(credentials);
+  const token = accessToken ?? (await getAccessToken(credentials)).accessToken;
   const startedAt = performance.now();
-  const response = await fetch(`${endpoints[marketplace.region]}${path}`, {
+  const response = await fetchWithRetry(`${endpoints[marketplace.region]}${path}`, {
     method,
     headers: {
       accept: "application/json",
-      "content-type": "application/json",
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
       "user-agent": "SP-API-Workbench/1.0 (Language=TypeScript; Platform=Node.js)",
-      "x-amz-access-token": accessToken,
-      "x-amz-date": toAmazonDate(new Date()),
+      "x-amz-access-token": token,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
@@ -123,10 +126,6 @@ export const privateHeaders = {
   Pragma: "no-cache",
 };
 
-function toAmazonDate(date: Date) {
-  return date.toISOString().replace(/[:-]|\.\d{3}/g, "");
-}
-
 async function readJson(response: Response): Promise<unknown> {
   const text = await response.text();
   if (!text) return null;
@@ -135,6 +134,18 @@ async function readJson(response: Response): Promise<unknown> {
   } catch {
     return { message: text };
   }
+}
+
+async function fetchWithRetry(url: string, init: RequestInit) {
+  let response = await fetch(url, init);
+  for (let attempt = 0; attempt < 2 && (response.status === 429 || response.status === 503); attempt += 1) {
+    const retryAfterHeader = response.headers.get("retry-after");
+    const retryAfter = retryAfterHeader === null ? Number.NaN : Number(retryAfterHeader);
+    const delayMs = Number.isFinite(retryAfter) ? Math.min(Math.max(retryAfter * 1000, 250), 2_000) : 500 * (attempt + 1);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    response = await fetch(url, init);
+  }
+  return response;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

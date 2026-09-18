@@ -86,7 +86,7 @@ const operationGroups: Array<{ label: string; items: OperationItem[] }> = [
   {
     label: "Products",
     items: [
-      { id: "catalog", label: "Catalogue item", description: "ASIN, SKU, barcode or keywords", icon: PackageSearch, kind: "read" },
+      { id: "catalog", label: "Catalogue item", description: "All datasets, images and related ASINs", icon: PackageSearch, kind: "read" },
       { id: "fees", label: "Fee estimate", description: "ASIN or seller SKU", icon: ReceiptText, kind: "read" },
       { id: "inventory", label: "FBA inventory", description: "Inventory summaries and quantities", icon: Warehouse, kind: "read" },
     ],
@@ -148,11 +148,22 @@ export function Workbench() {
   const [result, setResult] = useState<ApiResult | null>(null);
   const [copied, setCopied] = useState(false);
   const [fields, setFields] = useState<Record<string, FieldValue>>(defaultFields);
-  const [catalog, setCatalog] = useState({ mode: "identifier" as "identifier" | "keywords", identifierType: "ASIN", query: "", sellerId: "" });
+  const [catalog, setCatalog] = useState({
+    mode: "identifier" as "identifier" | "keywords",
+    identifierType: "ASIN",
+    query: "",
+    sellerId: "",
+    includeVariations: true,
+    brandNames: "",
+    classificationIds: "",
+    pageSize: "20",
+    pageToken: "",
+  });
   const [fees, setFees] = useState({ idType: "ASIN" as "ASIN" | "SKU", identifier: "", price: "", shipping: "0", isAmazonFulfilled: true });
 
   const marketplace = useMemo(() => getMarketplace(marketplaceId) ?? marketplaces[0], [marketplaceId]);
   const catalogItems = useMemo(() => extractCatalogItems(result), [result]);
+  const catalogFamily = useMemo(() => extractCatalogFamily(result), [result]);
   const feeSummary = useMemo(() => extractFeeSummary(result), [result]);
   const credentialsComplete = Object.values(credentials).every((value) => value.trim().length > 0);
   const activeItem = operationGroups.flatMap((group) => group.items).find((item) => item.id === operation)!;
@@ -312,7 +323,10 @@ export function Workbench() {
             {!result && !isLoading && <div className="empty-state"><Braces size={24} /><p>Run the selected operation to inspect Amazon&apos;s response.</p></div>}
             {isLoading && <div className="empty-state loading-state"><LoaderCircle className="spin" size={24} /><p>Waiting for Amazon…</p></div>}
             {result && !result.ok && <div className="error-banner"><X size={18} /><div><strong>Request failed</strong><p>{result.error ?? extractAmazonError(result.data)}</p></div></div>}
-            {result?.ok && operation === "catalog" && <div className="catalog-results">{catalogItems.length === 0 ? <p className="no-results">Amazon returned no catalogue items.</p> : catalogItems.map((item) => <CatalogResult key={item.asin} item={item} />)}</div>}
+            {result?.ok && operation === "catalog" && <div className="catalog-results">
+              {catalogFamily && <div className={"family-summary " + (catalogFamily.complete ? "complete" : "partial")}><strong>{catalogFamily.returnedCount} of {catalogFamily.requestedCount} related records returned</strong><span>{catalogFamily.complete ? "Complete variation and package relationship graph" : "Partial related set — see warnings in the JSON response"}</span></div>}
+              {catalogItems.length === 0 ? <p className="no-results">Amazon returned no catalogue items.</p> : catalogItems.map((item) => <CatalogResult key={item.asin} item={item} />)}
+            </div>}
             {result?.ok && operation === "fees" && feeSummary && <FeeResult summary={feeSummary} />}
             {result?.ok && operation !== "catalog" && operation !== "fees" && <div className="success-summary"><Check size={18} /><div><strong>Amazon accepted the request</strong><p>The complete response is available below.</p></div></div>}
           </div>
@@ -345,7 +359,17 @@ function OperationPicker({ active, onChange }: { active: Operation; onChange: (o
   ))}</div>;
 }
 
-type CatalogState = { mode: "identifier" | "keywords"; identifierType: string; query: string; sellerId: string };
+type CatalogState = {
+  mode: "identifier" | "keywords";
+  identifierType: string;
+  query: string;
+  sellerId: string;
+  includeVariations: boolean;
+  brandNames: string;
+  classificationIds: string;
+  pageSize: string;
+  pageToken: string;
+};
 type FeesState = { idType: "ASIN" | "SKU"; identifier: string; price: string; shipping: string; isAmazonFulfilled: boolean };
 
 function OperationFields({
@@ -365,6 +389,14 @@ function OperationFields({
     {catalog.mode === "identifier" && <Choice label="Identifier type" options={["ASIN", "UPC", "EAN", "GTIN", "ISBN", "SKU", "JAN", "MINSAN"]} value={catalog.identifierType} onChange={(value) => setCatalog((current) => ({ ...current, identifierType: value }))} />}
     <Field label={catalog.mode === "keywords" ? "Search terms" : "Product identifier(s)"}><input required placeholder={catalog.mode === "keywords" ? "wireless barcode scanner" : "One value, or up to 20 separated by commas"} value={catalog.query} onChange={(event) => setCatalog((current) => ({ ...current, query: event.target.value }))} /></Field>
     {catalog.identifierType === "SKU" && catalog.mode === "identifier" && <Field label="Seller ID"><input required placeholder="A1XXXXXXXXXXXX" value={catalog.sellerId} onChange={(event) => setCatalog((current) => ({ ...current, sellerId: event.target.value }))} /></Field>}
+    {catalog.mode === "identifier" && catalog.identifierType === "ASIN" && <CheckField label="Fetch every related variation and package ASIN for one ASIN" checked={catalog.includeVariations} onChange={(includeVariations) => setCatalog((current) => ({ ...current, includeVariations }))} />}
+    {catalog.mode === "keywords" && <>
+      <Field label="Brand names"><input placeholder="Optional · Nike,Adidas" value={catalog.brandNames} onChange={(event) => setCatalog((current) => ({ ...current, brandNames: event.target.value }))} /></Field>
+      <Field label="Classification IDs"><input placeholder="Optional · comma-separated" value={catalog.classificationIds} onChange={(event) => setCatalog((current) => ({ ...current, classificationIds: event.target.value }))} /></Field>
+      <Field label="Results per page"><input min="1" max="20" type="number" value={catalog.pageSize} onChange={(event) => setCatalog((current) => ({ ...current, pageSize: event.target.value }))} /></Field>
+      <Field label="Next-page token"><input placeholder="Optional · from the previous response" value={catalog.pageToken} onChange={(event) => setCatalog((current) => ({ ...current, pageToken: event.target.value }))} /></Field>
+    </>}
+    <div className="dataset-note"><Check size={15} /><span>Requests attributes, classifications, dimensions, identifiers, images, product types, relationships, sales ranks, summaries, and vendor details.</span></div>
   </div>;
 
   if (operation === "fees") return <div className="operation-fields">
@@ -383,16 +415,16 @@ function OperationFields({
   let content: React.ReactNode;
   switch (operation) {
     case "inventory":
-      content = <>{textarea("sellerSkus", "Seller SKUs", "Optional · one SKU per line or comma-separated")}{date("startDateTime", "Changed since")}<CheckField label="Include quantity details" checked={Boolean(fields.details)} onChange={(checked) => updateField("details", checked)} /></>;
+      content = <>{textarea("sellerSkus", "Seller SKUs", "Optional · one SKU per line or comma-separated")}{date("startDateTime", "Changed since")}{text("inventoryNextToken", "Next-page token", "Optional · from the previous response")}<CheckField label="Include quantity details" checked={Boolean(fields.details)} onChange={(checked) => updateField("details", checked)} /></>;
       break;
     case "orders":
-      content = <>{date("createdAfter", "Created after", true)}{date("createdBefore", "Created before")}{text("statuses", "Order statuses", "UNSHIPPED,SHIPPED")}{text("fulfilledBy", "Fulfilled by", "AMAZON or MERCHANT")}{text("pageSize", "Results per page", "50")}</>;
+      content = <>{date("createdAfter", "Created after", true)}{date("createdBefore", "Created before")}{text("statuses", "Order statuses", "UNSHIPPED,SHIPPED")}{text("fulfilledBy", "Fulfilled by", "AMAZON or MERCHANT")}{text("pageSize", "Results per page", "50")}{text("orderPaginationToken", "Next-page token", "Optional · from the previous response")}<div className="dataset-note"><Check size={15} /><span>Requests all Orders 2026 data groups, including buyer, recipient, payment, tax, packages, fulfilment, promotions, proceeds, expenses, cancellations, and order items.</span></div></>;
       break;
     case "order":
       content = text("orderId", "Amazon order ID", "114-1234567-1234567", true);
       break;
     case "reports":
-      content = <>{text("reportTypes", "Report type(s)", "GET_FLAT_FILE_OPEN_LISTINGS_DATA", true)}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}</>;
+      content = <>{text("reportTypes", "Report type(s)", "GET_FLAT_FILE_OPEN_LISTINGS_DATA", true)}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("reportNextToken", "Next-page token", "Optional · from the previous response")}</>;
       break;
     case "createReport":
       content = <>{text("reportType", "Report type", "GET_FLAT_FILE_OPEN_LISTINGS_DATA", true)}{date("dataStartTime", "Data start")}{date("dataEndTime", "Data end")}<Confirmation fields={fields} updateField={updateField} label="I understand this starts a report job in Amazon." /></>;
@@ -404,7 +436,7 @@ function OperationFields({
       content = text("reportDocumentId", "Report document ID", "amzn1.spdoc...", true);
       break;
     case "feeds":
-      content = <>{text("feedTypes", "Feed type(s)", "JSON_LISTINGS_FEED", true)}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}</>;
+      content = <>{text("feedTypes", "Feed type(s)", "JSON_LISTINGS_FEED", true)}{text("processingStatuses", "Processing statuses", "DONE,IN_PROGRESS")}{date("createdSince", "Created since")}{date("createdUntil", "Created until")}{text("pageSize", "Results per page", "20")}{text("feedNextToken", "Next-page token", "Optional · from the previous response")}</>;
       break;
     case "feed":
       content = text("feedId", "Feed ID", "123456789", true);
@@ -413,7 +445,7 @@ function OperationFields({
       content = <>{text("feedType", "Feed type", "JSON_LISTINGS_FEED", true)}{text("contentType", "Content type", "application/json; charset=UTF-8", true)}{textarea("content", "Feed content", "Paste the complete JSON or tab-delimited feed payload", true)}<Confirmation fields={fields} updateField={updateField} label="I understand this uploads data and starts a feed in Amazon." /></>;
       break;
     case "inboundPlans":
-      content = <><Choice label="Plan status" options={["ACTIVE", "SHIPPED", "VOIDED"]} value={value("status")} onChange={(next) => updateField("status", next)} /><Choice label="Sort order" options={["DESC", "ASC"]} value={value("sortOrder")} onChange={(next) => updateField("sortOrder", next)} />{text("pageSize", "Results per page", "10")}</>;
+      content = <><Choice label="Plan status" options={["ACTIVE", "SHIPPED", "VOIDED"]} value={value("status")} onChange={(next) => updateField("status", next)} /><Choice label="Sort by" options={["LAST_UPDATED_TIME", "CREATION_TIME"]} value={value("sortBy")} onChange={(next) => updateField("sortBy", next)} /><Choice label="Sort order" options={["DESC", "ASC"]} value={value("sortOrder")} onChange={(next) => updateField("sortOrder", next)} />{text("pageSize", "Results per page", "10")}{text("inboundPaginationToken", "Next-page token", "Optional · from the previous response")}</>;
       break;
     case "inboundPlan":
       content = text("inboundPlanId", "Inbound plan ID", "wf12345678-...", true);
@@ -428,7 +460,7 @@ function OperationFields({
       content = <>{text("planName", "Plan name", "September replenishment")}{textarea("items", "Items", "MSKU, quantity, prep owner, label owner", true)}<div className="subsection-label">Ship-from address</div>{text("contactName", "Contact name", "Jane Smith", true)}{text("companyName", "Company")}{text("addressLine1", "Address line 1", "123 Main Street", true)}{text("addressLine2", "Address line 2")}{text("city", "City", "Toronto", true)}{text("stateOrProvinceCode", "State / province", "ON")}{text("postalCode", "Postal code", "M1M 1M1", true)}{text("countryCode", "Country code", "CA", true)}{text("phoneNumber", "Phone number", "+1 555 0100", true)}<Confirmation fields={fields} updateField={updateField} label="I understand this creates an inbound plan in Amazon." /></>;
       break;
     case "itemLabels":
-      content = <>{textarea("items", "Items", "MSKU, quantity", true)}<Choice label="Label format" options={["STANDARD_FORMAT", "THERMAL_PRINTING"]} value={value("labelType")} onChange={(next) => updateField("labelType", next)} />{text("pageType", "Page type", "A4_21")}</>;
+      content = <>{textarea("items", "Items", "MSKU, quantity", true)}<Choice label="Label format" options={["STANDARD_FORMAT", "THERMAL_PRINTING"]} value={value("labelType")} onChange={(next) => updateField("labelType", next)} /><Choice label="Page type" options={["A4_21", "A4_24", "A4_24_64x33", "A4_24_66x35", "A4_24_70x36", "A4_24_70x37", "A4_24i", "A4_27", "A4_40_52x29", "A4_44_48x25", "Letter_30"]} value={value("pageType")} onChange={(next) => updateField("pageType", next)} /></>;
       break;
     case "shipmentLabels":
       content = <>{text("shipmentId", "Shipment ID", "FBA123456789", true)}<Choice label="Label type" options={["UNIQUE", "BARCODE_2D", "PALLET"]} value={value("shipmentLabelType")} onChange={(next) => updateField("shipmentLabelType", next)} />{text("shipmentPageType", "Page type", "PackageLabel_Thermal_NonPCP", true)}{text("numberOfPackages", "Number of packages", "Optional")}{text("numberOfPallets", "Number of pallets", "Required for pallet labels")}</>;
@@ -458,9 +490,9 @@ function Confirmation({ fields, updateField, label }: { fields: Record<string, F
   return <div className="write-confirmation"><CheckField checked={Boolean(fields.confirmed)} label={label} onChange={(checked) => updateField("confirmed", checked)} /></div>;
 }
 
-type CatalogItem = { asin: string; title: string; brand: string; productType: string; image: string | null; identifiers: string[] };
+type CatalogItem = { asin: string; title: string; brand: string; productType: string; images: string[]; identifiers: string[]; datasets: string[] };
 function CatalogResult({ item }: { item: CatalogItem }) {
-  return <article className="catalog-item"><div className="product-image">{item.image ? <Image src={item.image} alt="" width={86} height={86} unoptimized /> : <PackageSearch size={28} />}</div><div className="product-copy"><div className="product-kicker"><span>{item.productType}</span><span>{item.asin}</span></div><h4>{item.title}</h4><p>{item.brand || "Brand not returned"}</p>{item.identifiers.length > 0 && <div className="identifier-list">{item.identifiers.slice(0, 4).map((identifier) => <span key={identifier}>{identifier}</span>)}</div>}</div></article>;
+  return <article className="catalog-item"><div className="product-gallery">{item.images.length ? item.images.slice(0, 6).map((image, index) => <div className="product-image" key={image}><Image src={image} alt={index === 0 ? item.title : ""} width={86} height={86} unoptimized /></div>) : <div className="product-image"><PackageSearch size={28} /></div>}</div><div className="product-copy"><div className="product-kicker"><span>{item.productType}</span><span>{item.asin}</span></div><h4>{item.title}</h4><p>{item.brand || "Brand not returned"}</p>{item.identifiers.length > 0 && <div className="identifier-list">{item.identifiers.slice(0, 8).map((identifier) => <span key={identifier}>{identifier}</span>)}</div>}<div className="dataset-list">{item.datasets.map((dataset) => <span key={dataset}>{formatLabel(dataset)}</span>)}</div></div></article>;
 }
 
 type FeeSummary = { status: string; amount: number | null; currency: string; details: Array<{ type: string; amount: number | null; currency: string }> };
@@ -484,11 +516,23 @@ function extractCatalogItems(result: ApiResult | null): CatalogItem[] {
     const images = Array.isArray(raw.images) ? raw.images : [];
     const imageGroup = images.find(isRecord);
     const imageList = imageGroup && Array.isArray(imageGroup.images) ? imageGroup.images : [];
-    const image = imageList.find((entry) => isRecord(entry) && entry.variant === "MAIN") ?? imageList.find(isRecord);
+    const imageEntries = imageList.filter(isRecord);
+    const mainImage = imageEntries.find((entry) => entry.variant === "MAIN");
+    const orderedImages = mainImage ? [mainImage, ...imageEntries.filter((entry) => entry !== mainImage)] : imageEntries;
+    const imageLinks = [...new Set(orderedImages.map((entry) => stringValue(entry.link)).filter(Boolean))];
     const productTypes = Array.isArray(raw.productTypes) ? raw.productTypes : [];
     const productType = productTypes.find(isRecord);
-    return { asin: raw.asin, title: stringValue(summary.itemName) || "Untitled catalogue item", brand: stringValue(summary.brand), productType: productType ? stringValue(productType.productType) || "PRODUCT" : "PRODUCT", image: image && isRecord(image) ? stringValue(image.link) || null : null, identifiers: collectIdentifiers(raw.identifiers) };
+    const datasets = ["attributes", "classifications", "dimensions", "identifiers", "images", "productTypes", "relationships", "salesRanks", "summaries", "vendorDetails"].filter((key) => raw[key] !== undefined);
+    return { asin: raw.asin, title: stringValue(summary.itemName) || "Untitled catalogue item", brand: stringValue(summary.brand), productType: productType ? stringValue(productType.productType) || "PRODUCT" : "PRODUCT", images: imageLinks, identifiers: collectIdentifiers(raw.identifiers), datasets };
   }).filter((item): item is CatalogItem => item !== null);
+}
+
+type CatalogFamily = { requestedCount: number; returnedCount: number; complete: boolean };
+function extractCatalogFamily(result: ApiResult | null): CatalogFamily | null {
+  if (!result?.ok || !isRecord(result.data) || !isRecord(result.data.family)) return null;
+  const family = result.data.family;
+  if (typeof family.requestedCount !== "number" || typeof family.returnedCount !== "number" || typeof family.complete !== "boolean") return null;
+  return { requestedCount: family.requestedCount, returnedCount: family.returnedCount, complete: family.complete };
 }
 
 function collectIdentifiers(value: unknown) {

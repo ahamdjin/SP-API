@@ -7,10 +7,11 @@ A local workbench for testing Amazon Selling Partner API credentials and running
 - LWA credential test (`client_id`, `client_secret`, and `refresh_token`)
 - Catalog Items API `2022-04-01`
 - ASIN, UPC, EAN, GTIN, ISBN, JAN, MINSAN, SKU, and keyword searches
-- Structured catalogue results plus complete raw JSON
+- Exact-ASIN lookup with every Catalog Items dataset and recursive variation/package-family retrieval
+- Structured catalogue results with all returned images plus complete raw JSON
 - Product Fees API v0 estimates for ASINs and seller SKUs
 - FBA inventory summaries
-- Order search and full order retrieval using Orders API `2026-01-01`
+- Order search and full order retrieval using Orders API `2026-01-01`, requesting every optional data group
 - Report listing, creation, status, and document URL retrieval
 - Feed listing, status, document upload, and submission
 - FBA inbound plan, shipment, prep, plan creation, and item-label tools using Fulfillment Inbound `2024-03-20`
@@ -18,6 +19,26 @@ A local workbench for testing Amazon Selling Partner API credentials and running
 - Amazon request ID, rate-limit, duration, and HTTP status inspection
 
 Amazon write operations are clearly marked and require an explicit confirmation before each run.
+
+## Connected endpoint coverage
+
+Every non-legacy button visible in the workbench is connected to a current Amazon operation. The method and path mapping was audited against Amazon's official `selling-partner-api-models` repository at commit `3659f96867bfc669aca7a524c2f95744ff0e4478` (2026-08-26).
+
+| Area | Connected operations |
+| --- | --- |
+| Authentication | LWA refresh-token exchange at `POST /auth/o2/token` |
+| Catalogue | `GET /catalog/2022-04-01/items/{asin}` and `GET /catalog/2022-04-01/items` |
+| Fees | `POST /products/fees/v0/items/{asin}/feesEstimate` and `POST /products/fees/v0/listings/{sellerSku}/feesEstimate` |
+| Inventory | `GET /fba/inventory/v1/summaries` |
+| Orders | `GET /orders/2026-01-01/orders` and `GET /orders/2026-01-01/orders/{orderId}` |
+| Reports | List, create, inspect, and retrieve document URL under `/reports/2021-06-30` |
+| Feeds | List, inspect, create document, upload to Amazon's validated S3 URL, and create feed under `/feeds/2021-06-30` |
+| FBA inbound | List/get/create plans, get shipment, prep details, and item labels under `/inbound/fba/2024-03-20` |
+| FBA documents | Shipment labels and bill of lading under `/fba/inbound/v0` (still present in Amazon's current model) |
+
+Catalogue calls request all ten datasets Amazon exposes: attributes, classifications, dimensions, identifiers, images, product types, relationships, sales ranks, summaries, and vendor details. For one exact ASIN, the default option follows both variation and package relationships until all discoverable related ASIN records have been requested. Keyword searches remain paginated because automatically crawling an unbounded search could return thousands of unrelated products; the next-page token is visible in the form and raw response.
+
+This is endpoint coverage for the operations represented by the original `FbaFees` utility and this workbench, not every API in the full Amazon SP-API catalog. The current staged inbound workflow has many additional packing, placement, delivery, and transportation endpoints that the old desktop utility did not expose as standalone tools.
 
 ## Legacy boundaries
 

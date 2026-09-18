@@ -15,9 +15,17 @@ export const catalogRequestSchema = baseRequestSchema.extend({
   query: z.string().trim().min(1, "Enter a product identifier or keywords"),
   identifierType: z.enum(["ASIN", "EAN", "GTIN", "ISBN", "JAN", "MINSAN", "SKU", "UPC"]),
   sellerId: z.string().trim().optional().default(""),
+  includeVariations: z.boolean().optional().default(true),
+  brandNames: z.string().trim().optional().default(""),
+  classificationIds: z.string().trim().optional().default(""),
+  pageSize: z.coerce.number().int().min(1).max(20).optional().default(20),
+  pageToken: z.string().trim().optional().default(""),
 }).superRefine((value, context) => {
   if (value.mode === "identifier" && value.identifierType === "SKU" && !value.sellerId) {
     context.addIssue({ code: "custom", path: ["sellerId"], message: "Seller ID is required for SKU searches" });
+  }
+  if (value.mode === "identifier" && value.query.split(/[\n,]/).filter((entry) => entry.trim()).length > 20) {
+    context.addIssue({ code: "custom", path: ["query"], message: "Amazon accepts at most 20 identifiers per catalogue search" });
   }
 });
 
