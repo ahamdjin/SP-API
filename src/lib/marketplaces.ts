@@ -17,6 +17,7 @@ export const marketplaces: Marketplace[] = [
   { id: "A1F83G8C2ARO7P", name: "United Kingdom", region: "eu", currency: "GBP", locale: "en_GB" },
   { id: "A1PA6795UKMFR9", name: "Germany", region: "eu", currency: "EUR", locale: "de_DE" },
   { id: "A13V1IB3VIYZZH", name: "France", region: "eu", currency: "EUR", locale: "fr_FR" },
+  { id: "AMEN7PMS3EDWL", name: "Belgium", region: "eu", currency: "EUR", locale: "fr_BE" },
   { id: "APJ6JRA9NG5V4", name: "Italy", region: "eu", currency: "EUR", locale: "it_IT" },
   { id: "A1RKKUPIHCS9HS", name: "Spain", region: "eu", currency: "EUR", locale: "es_ES" },
   { id: "A1805IZSGTT6HS", name: "Netherlands", region: "eu", currency: "EUR", locale: "nl_NL" },

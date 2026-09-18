@@ -1,4 +1,5 @@
 import { getMarketplace } from "@/lib/marketplaces";
+import { parseCsvFields, preserveIsoDate, preserveIsoInstant } from "@/lib/request-parsing";
 import { operationRequestSchema } from "@/lib/schemas";
 import { callSpApi, privateHeaders, SpApiError, toErrorResponse } from "@/lib/sp-api";
 
@@ -18,11 +19,41 @@ const coreOrderData = [
 
 function orderIncludedData(fields: Fields) {
   const override = optionalString(fields, "orderIncludedData");
-  if (override) return csvValues(override, 20).join(",");
+  if (override) {
+    const values = csvValues(override, 11);
+    validateEnumValues("includedData", values, orderIncludedDataValues);
+    return values.join(",");
+  }
   return booleanField(fields, "includeOrderPii")
     ? ["BUYER", "RECIPIENT", coreOrderData].join(",")
     : coreOrderData;
 }
+
+const orderIncludedDataValues = new Set(["BUYER", "RECIPIENT", "PROCEEDS", "EXPENSE", "PROMOTION", "CANCELLATION", "FULFILLMENT", "PACKAGES", "TAX", "PAYMENT", "FULFILLMENT_ORDERS"]);
+const orderStatusValues = new Set(["PENDING_AVAILABILITY", "PENDING", "UNSHIPPED", "PARTIALLY_SHIPPED", "SHIPPED", "CANCELLED", "UNFULFILLABLE"]);
+const fulfilledByValues = new Set(["MERCHANT", "AMAZON"]);
+const processingStatusValues = new Set(["CANCELLED", "DONE", "FATAL", "IN_PROGRESS", "IN_QUEUE"]);
+const inboundPlanStatusValues = new Set(["ACTIVE", "VOIDED", "SHIPPED"]);
+const inboundSortByValues = new Set(["LAST_UPDATED_TIME", "CREATION_TIME"]);
+const sortOrderValues = new Set(["ASC", "DESC"]);
+const itemLabelTypeValues = new Set(["STANDARD_FORMAT", "THERMAL_PRINTING"]);
+const itemLabelPageTypeValues = new Set(["A4_21", "A4_24", "A4_24_64x33", "A4_24_66x35", "A4_24_70x36", "A4_24_70x37", "A4_24i", "A4_27", "A4_40_52x29", "A4_44_48x25", "Letter_30"]);
+const shipmentLabelTypeValues = new Set(["BARCODE_2D", "UNIQUE", "PALLET"]);
+const shipmentPageTypeValues = new Set(["PackageLabel_Letter_2", "PackageLabel_Letter_4", "PackageLabel_Letter_6", "PackageLabel_Letter_6_CarrierLeft", "PackageLabel_A4_2", "PackageLabel_A4_4", "PackageLabel_Plain_Paper", "PackageLabel_Plain_Paper_CarrierBottom", "PackageLabel_Thermal", "PackageLabel_Thermal_Unified", "PackageLabel_Thermal_NonPCP", "PackageLabel_Thermal_No_Carrier_Rotation"]);
+const removedProductionListingFeedTypes = new Set([
+  "POST_PRODUCT_DATA",
+  "POST_INVENTORY_AVAILABILITY_DATA",
+  "POST_PRODUCT_OVERRIDES_DATA",
+  "POST_PRODUCT_PRICING_DATA",
+  "POST_PRODUCT_IMAGE_DATA",
+  "POST_PRODUCT_RELATIONSHIP_DATA",
+  "POST_FLAT_FILE_INVLOADER_DATA",
+  "POST_FLAT_FILE_BOOKLOADER_DATA",
+  "POST_FLAT_FILE_CONVERGENCE_LISTINGS_DATA",
+  "POST_FLAT_FILE_LISTINGS_DATA",
+  "POST_FLAT_FILE_PRICEANDQUANTITYONLY_UPDATE_DATA",
+  "POST_UIEE_BOOKLOADER_DATA",
+]);
 
 const documentPreviewLimit = 2 * 1024 * 1024;
 
@@ -41,7 +72,9 @@ export async function POST(request: Request) {
           marketplaceIds: input.marketplaceId,
         });
         addCsv(params, "sellerSkus", optionalString(fields, "sellerSkus"), 50);
-        addOptional(params, "startDateTime", optionalDate(fields, "startDateTime"));
+        const startDateTime = optionalDate(fields, "startDateTime");
+        validateInventoryStartDate(startDateTime);
+        addOptional(params, "startDateTime", startDateTime);
         addOptional(params, "nextToken", optionalString(fields, "inventoryNextToken"));
         result = await call(input, "/fba/inventory/v1/summaries?" + params);
         break;
@@ -59,8 +92,12 @@ export async function POST(request: Request) {
         });
         addOptional(params, "maxResultsPerPage", optionalIntegerField(fields, "pageSize", 1, 100));
         addOptional(params, "createdBefore", createdBefore);
-        addCsv(params, "fulfillmentStatuses", optionalString(fields, "statuses"), 7);
-        addCsv(params, "fulfilledBy", optionalString(fields, "fulfilledBy"), 2);
+        const statuses = csvValues(optionalString(fields, "statuses"), 7);
+        const fulfilledBy = csvValues(optionalString(fields, "fulfilledBy"), 2);
+        validateEnumValues("fulfillmentStatuses", statuses, orderStatusValues);
+        validateEnumValues("fulfilledBy", fulfilledBy, fulfilledByValues);
+        if (statuses.length) params.set("fulfillmentStatuses", statuses.join(","));
+        if (fulfilledBy.length) params.set("fulfilledBy", fulfilledBy.join(","));
         addOptional(params, "paginationToken", optionalString(fields, "orderPaginationToken"));
         result = await call(input, "/orders/2026-01-01/orders?" + params);
         break;
@@ -79,11 +116,18 @@ export async function POST(request: Request) {
 
         if (!nextToken) {
           addCsv(params, "reportTypes", optionalString(fields, "reportTypes"), 10);
-          addCsv(params, "processingStatuses", optionalString(fields, "processingStatuses"), 5);
-          addCsv(params, "marketplaceIds", optionalString(fields, "reportMarketplaceIds"), 10);
+          const processingStatuses = csvValues(optionalString(fields, "processingStatuses"), 5);
+          validateEnumValues("processingStatuses", processingStatuses, processingStatusValues);
+          if (processingStatuses.length) params.set("processingStatuses", processingStatuses.join(","));
+          const reportMarketplaceIds = csvValues(optionalString(fields, "reportMarketplaceIds"), 10);
+          validateMarketplaceRegions(input, reportMarketplaceIds, "reportMarketplaceIds");
+          if (reportMarketplaceIds.length) params.set("marketplaceIds", reportMarketplaceIds.join(","));
           addOptional(params, "pageSize", optionalIntegerField(fields, "pageSize", 1, 100));
-          addOptional(params, "createdSince", optionalDate(fields, "createdSince"));
-          addOptional(params, "createdUntil", optionalDate(fields, "createdUntil"));
+          const createdSince = optionalDate(fields, "createdSince");
+          const createdUntil = optionalDate(fields, "createdUntil");
+          validateOptionalRange(createdSince || undefined, createdUntil || undefined, "createdSince", "createdUntil");
+          addOptional(params, "createdSince", createdSince);
+          addOptional(params, "createdUntil", createdUntil);
         }
         result = await call(input, "/reports/2021-06-30/reports?" + params);
         break;
@@ -94,9 +138,11 @@ export async function POST(request: Request) {
         const range = optionalDateRange(fields);
         validateOptionalRange(range.dataStartTime, range.dataEndTime, "dataStartTime", "dataEndTime");
         const marketplaceIds = csvValues(optionalString(fields, "reportMarketplaceIds"), 10);
+        const requestedMarketplaces = marketplaceIds.length ? marketplaceIds : [input.marketplaceId];
+        validateMarketplaceRegions(input, requestedMarketplaces, "reportMarketplaceIds");
         result = await call(input, "/reports/2021-06-30/reports", "POST", {
           reportType: stringField(fields, "reportType"),
-          marketplaceIds: marketplaceIds.length ? marketplaceIds : [input.marketplaceId],
+          marketplaceIds: requestedMarketplaces,
           ...range,
         });
         break;
@@ -125,11 +171,18 @@ export async function POST(request: Request) {
 
         if (!nextToken) {
           addCsv(params, "feedTypes", optionalString(fields, "feedTypes"), 10);
-          addCsv(params, "processingStatuses", optionalString(fields, "processingStatuses"), 5);
-          addCsv(params, "marketplaceIds", optionalString(fields, "feedMarketplaceIds"), 10);
+          const processingStatuses = csvValues(optionalString(fields, "processingStatuses"), 5);
+          validateEnumValues("processingStatuses", processingStatuses, processingStatusValues);
+          if (processingStatuses.length) params.set("processingStatuses", processingStatuses.join(","));
+          const feedMarketplaceIds = csvValues(optionalString(fields, "feedMarketplaceIds"), 10);
+          validateMarketplaceRegions(input, feedMarketplaceIds, "feedMarketplaceIds");
+          if (feedMarketplaceIds.length) params.set("marketplaceIds", feedMarketplaceIds.join(","));
           addOptional(params, "pageSize", optionalIntegerField(fields, "pageSize", 1, 100));
-          addOptional(params, "createdSince", optionalDate(fields, "createdSince"));
-          addOptional(params, "createdUntil", optionalDate(fields, "createdUntil"));
+          const createdSince = optionalDate(fields, "createdSince");
+          const createdUntil = optionalDate(fields, "createdUntil");
+          validateOptionalRange(createdSince || undefined, createdUntil || undefined, "createdSince", "createdUntil");
+          addOptional(params, "createdSince", createdSince);
+          addOptional(params, "createdUntil", createdUntil);
         }
         result = await call(input, "/feeds/2021-06-30/feeds?" + params);
         break;
@@ -160,9 +213,9 @@ export async function POST(request: Request) {
       case "inboundPlans": {
         const params = new URLSearchParams();
         addOptional(params, "pageSize", optionalIntegerField(fields, "pageSize", 1, 30));
-        addOptional(params, "sortBy", optionalString(fields, "sortBy"));
-        addOptional(params, "sortOrder", optionalString(fields, "sortOrder"));
-        addOptional(params, "status", optionalString(fields, "status"));
+        addOptional(params, "sortBy", optionalEnumString(fields, "sortBy", inboundSortByValues));
+        addOptional(params, "sortOrder", optionalEnumString(fields, "sortOrder", sortOrderValues));
+        addOptional(params, "status", optionalEnumString(fields, "status", inboundPlanStatusValues));
         addOptional(params, "paginationToken", optionalString(fields, "inboundPaginationToken"));
         result = await call(input, "/inbound/fba/2024-03-20/inboundPlans?" + params);
         break;
@@ -197,42 +250,52 @@ export async function POST(request: Request) {
       case "createInboundPlan": {
         requireConfirmation(fields);
         const marketplace = getMarketplace(input.marketplaceId);
-        const destinationMarketplaces = csvValues(optionalString(fields, "destinationMarketplaces"), 10);
+        const destinationMarketplaces = csvValues(optionalString(fields, "destinationMarketplaces"), 1);
+        const countryCode = (optionalString(fields, "countryCode") || marketplace?.locale.slice(-2) || "US").toUpperCase();
+        if (!/^[A-Z]{2}$/.test(countryCode)) {
+          throw new SpApiError("countryCode must be a two-letter ISO country code", 400, { countryCode }, "INVALID_COUNTRY_CODE");
+        }
+
+        const requestedDestinations = destinationMarketplaces.length ? destinationMarketplaces : [input.marketplaceId];
+        validateMarketplaceRegions(input, requestedDestinations, "destinationMarketplaces");
+        const items = parseItems(stringField(fields, "items"), 2000, 500000);
+        validateInboundItems(items, requestedDestinations[0]);
+
         result = await call(input, "/inbound/fba/2024-03-20/inboundPlans", "POST", {
-          destinationMarketplaces: destinationMarketplaces.length ? destinationMarketplaces : [input.marketplaceId],
-          name: optionalString(fields, "planName") || undefined,
+          destinationMarketplaces: requestedDestinations,
+          name: optionalLimitedStringField(fields, "planName", 40) || undefined,
           sourceAddress: {
-            name: stringField(fields, "contactName"),
-            companyName: optionalString(fields, "companyName") || undefined,
-            addressLine1: stringField(fields, "addressLine1"),
-            addressLine2: optionalString(fields, "addressLine2") || undefined,
-            city: stringField(fields, "city"),
-            districtOrCounty: optionalString(fields, "districtOrCounty") || undefined,
-            stateOrProvinceCode: optionalString(fields, "stateOrProvinceCode") || undefined,
-            postalCode: stringField(fields, "postalCode"),
-            countryCode: (optionalString(fields, "countryCode") || marketplace?.locale.slice(-2) || "US").toUpperCase(),
-            phoneNumber: stringField(fields, "phoneNumber"),
-            email: optionalString(fields, "email") || undefined,
+            name: limitedStringField(fields, "contactName", 50),
+            companyName: optionalLimitedStringField(fields, "companyName", 50) || undefined,
+            addressLine1: limitedStringField(fields, "addressLine1", 180),
+            addressLine2: optionalLimitedStringField(fields, "addressLine2", 60) || undefined,
+            city: limitedStringField(fields, "city", 30),
+            districtOrCounty: optionalLimitedStringField(fields, "districtOrCounty", 50) || undefined,
+            stateOrProvinceCode: optionalLimitedStringField(fields, "stateOrProvinceCode", 64) || undefined,
+            postalCode: limitedStringField(fields, "postalCode", 32),
+            countryCode,
+            phoneNumber: limitedStringField(fields, "phoneNumber", 20),
+            email: optionalLimitedStringField(fields, "email", 1024) || undefined,
           },
-          items: parseItems(stringField(fields, "items"), 2000),
+          items,
         });
         break;
       }
 
       case "itemLabels": {
         const marketplace = getMarketplace(input.marketplaceId);
-        const labelType = optionalString(fields, "labelType") || "STANDARD_FORMAT";
+        const labelType = optionalEnumString(fields, "labelType", itemLabelTypeValues) || "STANDARD_FORMAT";
         const body: Record<string, unknown> = {
           marketplaceId: input.marketplaceId,
           labelType,
           localeCode: marketplace?.locale || "en_US",
-          mskuQuantities: parseItems(stringField(fields, "items"), 100).map(({ msku, quantity }) => ({ msku, quantity })),
+          mskuQuantities: parseItems(stringField(fields, "items"), 100, 10000).map(({ msku, quantity }) => ({ msku, quantity })),
         };
         if (labelType === "THERMAL_PRINTING") {
-          body.height = numberField(fields, "labelHeight", 1, 1000, 25);
-          body.width = numberField(fields, "labelWidth", 1, 1000, 100);
+          body.height = numberField(fields, "labelHeight", 25, 100, 25);
+          body.width = numberField(fields, "labelWidth", 25, 100, 100);
         } else {
-          body.pageType = optionalString(fields, "pageType") || "A4_21";
+          body.pageType = optionalEnumString(fields, "pageType", itemLabelPageTypeValues) || "A4_21";
         }
         result = await call(input, "/inbound/fba/2024-03-20/items/labels", "POST", body);
         break;
@@ -240,19 +303,19 @@ export async function POST(request: Request) {
 
       case "shipmentLabels": {
         const shipmentId = stringField(fields, "shipmentId");
-        const labelType = optionalString(fields, "shipmentLabelType") || "UNIQUE";
+        const labelType = optionalEnumString(fields, "shipmentLabelType", shipmentLabelTypeValues) || "UNIQUE";
         const numberOfPallets = optionalIntegerField(fields, "numberOfPallets", 1);
         if (labelType === "PALLET" && !numberOfPallets) {
           throw new SpApiError("numberOfPallets is required for PALLET labels", 400, null, "MISSING_NUMBER_OF_PALLETS");
         }
 
         const params = new URLSearchParams({
-          PageType: optionalString(fields, "shipmentPageType") || "PackageLabel_Thermal_NonPCP",
+          PageType: optionalEnumString(fields, "shipmentPageType", shipmentPageTypeValues) || "PackageLabel_Thermal_NonPCP",
           LabelType: labelType,
         });
         addOptional(params, "NumberOfPackages", optionalIntegerField(fields, "numberOfPackages", 1));
         addOptional(params, "NumberOfPallets", numberOfPallets);
-        addOptional(params, "PageSize", optionalIntegerField(fields, "shipmentPageSize", 1));
+        addOptional(params, "PageSize", optionalIntegerField(fields, "shipmentPageSize", 1, 1000));
         addOptional(params, "PageStartIndex", optionalIntegerField(fields, "pageStartIndex", 0));
         addCsv(params, "PackageLabelsToPrint", optionalString(fields, "packageLabelsToPrint"), 1000);
         result = await call(input, "/fba/inbound/v0/shipments/" + encodeURIComponent(shipmentId) + "/labels?" + params);
@@ -290,9 +353,20 @@ function call(input: Input, path: string, method: "GET" | "POST" = "GET", body?:
 
 async function submitFeed(input: Input, fields: Fields) {
   const feedType = stringField(fields, "feedType");
+  if (input.environment === "production" && removedProductionListingFeedTypes.has(feedType)) {
+    throw new SpApiError(
+      "This legacy listings feed type was removed by Amazon on July 31, 2025. Use JSON_LISTINGS_FEED (or Listings Items API for individual SKU changes) in Production.",
+      400,
+      { feedType, replacement: "JSON_LISTINGS_FEED" },
+      "REMOVED_LISTING_FEED_TYPE",
+    );
+  }
+
   const contentType = optionalString(fields, "contentType") || "application/json; charset=UTF-8";
   const content = stringField(fields, "content");
   const marketplaceIds = csvValues(optionalString(fields, "feedMarketplaceIds"), 10);
+  const requestedMarketplaces = marketplaceIds.length ? marketplaceIds : [input.marketplaceId];
+  validateMarketplaceRegions(input, requestedMarketplaces, "feedMarketplaceIds");
 
   if (feedType === "JSON_LISTINGS_FEED") {
     validateJsonListingsFeed(contentType, content);
@@ -333,7 +407,7 @@ async function submitFeed(input: Input, fields: Fields) {
 
   const created = await call(input, "/feeds/2021-06-30/feeds", "POST", {
     feedType,
-    marketplaceIds: marketplaceIds.length ? marketplaceIds : [input.marketplaceId],
+    marketplaceIds: requestedMarketplaces,
     inputFeedDocumentId: feedDocumentId,
   });
 
@@ -484,6 +558,46 @@ function safeAmazonDocumentUrl(value: string, label: string) {
     );
   }
   return url;
+}
+
+function validateMarketplaceRegions(input: Input, marketplaceIds: string[], key: string) {
+  if (input.environment !== "production" || marketplaceIds.length === 0) return;
+  const selected = getMarketplace(input.marketplaceId);
+  if (!selected) return;
+
+  const unknown = marketplaceIds.filter((id) => !getMarketplace(id));
+  if (unknown.length) {
+    throw new SpApiError(
+      key + " contains unsupported marketplace IDs",
+      400,
+      { unknown },
+      "UNSUPPORTED_MARKETPLACE",
+    );
+  }
+
+  const wrongRegion = marketplaceIds.filter((id) => getMarketplace(id)?.region !== selected.region);
+  if (wrongRegion.length) {
+    throw new SpApiError(
+      key + " must use marketplaces in the same SP-API selling region as the selected marketplace",
+      400,
+      { selectedMarketplace: input.marketplaceId, selectedRegion: selected.region, wrongRegion },
+      "MARKETPLACE_REGION_MISMATCH",
+    );
+  }
+}
+
+function validateInventoryStartDate(startDateTime: string) {
+  if (!startDateTime) return;
+  const earliest = new Date();
+  earliest.setUTCMonth(earliest.getUTCMonth() - 18);
+  if (new Date(startDateTime).getTime() < earliest.getTime()) {
+    throw new SpApiError(
+      "startDateTime cannot be earlier than 18 months before the request",
+      400,
+      { startDateTime, earliestAllowed: earliest.toISOString() },
+      "INVENTORY_START_TOO_OLD",
+    );
+  }
 }
 
 function validateCreatedOrderWindow(createdAfter: string, createdBefore: string) {
@@ -703,31 +817,77 @@ function optionalString(fields: Fields, key: string) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function optionalEnumString(fields: Fields, key: string, allowed: Set<string>) {
+  const value = optionalString(fields, key);
+  if (!value) return "";
+  if (!allowed.has(value)) {
+    throw new SpApiError(key + " has an unsupported value", 400, { value, allowed: [...allowed] }, "INVALID_ENUM_VALUE");
+  }
+  return value;
+}
+
+function validateEnumValues(key: string, values: string[], allowed: Set<string>) {
+  const invalid = values.filter((value) => !allowed.has(value));
+  if (invalid.length) {
+    throw new SpApiError(key + " contains unsupported value(s)", 400, { invalid, allowed: [...allowed] }, "INVALID_ENUM_VALUE");
+  }
+}
+
+function limitedStringField(fields: Fields, key: string, maxLength: number) {
+  const value = stringField(fields, key);
+  if (value.length > maxLength) {
+    throw new SpApiError(key + " must be at most " + maxLength + " characters", 400, { length: value.length }, "VALUE_TOO_LONG");
+  }
+  return value;
+}
+
+function optionalLimitedStringField(fields: Fields, key: string, maxLength: number) {
+  const value = optionalString(fields, key);
+  if (value.length > maxLength) {
+    throw new SpApiError(key + " must be at most " + maxLength + " characters", 400, { length: value.length }, "VALUE_TOO_LONG");
+  }
+  return value;
+}
+
 function booleanField(fields: Fields, key: string) {
   return fields[key] === true || fields[key] === "true";
 }
 
 function dateField(fields: Fields, key: string) {
   const value = stringField(fields, key);
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) throw new SpApiError(key + " must be a valid date", 400, null, "INVALID_DATE");
-  return date.toISOString();
+  const parsed = preserveIsoInstant(value);
+  if (!parsed) {
+    throw new SpApiError(
+      key + " must be an ISO 8601 timestamp with an explicit timezone, for example 2026-09-18T12:00:00Z",
+      400,
+      { value },
+      "INVALID_DATE",
+    );
+  }
+  return parsed;
 }
 
 function optionalDate(fields: Fields, key: string) {
   const value = optionalString(fields, key);
   if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) throw new SpApiError(key + " must be a valid date", 400, null, "INVALID_DATE");
-  return date.toISOString();
+  const parsed = preserveIsoInstant(value);
+  if (!parsed) {
+    throw new SpApiError(
+      key + " must be an ISO 8601 timestamp with an explicit timezone, for example 2026-09-18T12:00:00Z",
+      400,
+      { value },
+      "INVALID_DATE",
+    );
+  }
+  return parsed;
 }
 
 function numberField(fields: Fields, key: string, min: number, max: number, fallback: number) {
   const raw = fields[key];
   if (raw === undefined || raw === "") return fallback;
   const value = Number(raw);
-  if (!Number.isInteger(value) || value < min || value > max) {
-    throw new SpApiError(key + " must be between " + min + " and " + max, 400, null, "INVALID_NUMBER");
+  if (!Number.isFinite(value) || value < min || value > max) {
+    throw new SpApiError(key + " must be a number between " + min + " and " + max, 400, null, "INVALID_NUMBER");
   }
   return value;
 }
@@ -791,25 +951,59 @@ function requireConfirmation(fields: Fields) {
   }
 }
 
-function parseItems(value: string, max = 2000) {
+function parseItems(value: string, max = 2000, maxQuantity = 500000) {
   const items = value.split(/\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
-    const [msku, quantityRaw, prepOwner = "SELLER", labelOwner = "SELLER", expiration = "", manufacturingLotCode = ""] = line.split(",").map((part) => part.trim());
+    let fields: string[];
+    try {
+      fields = parseCsvFields(line);
+    } catch (error) {
+      throw new SpApiError(
+        "Each item row must be valid CSV. Quote an MSKU if it contains a comma, for example \"SKU,WITH,COMMA\", 2, SELLER, SELLER",
+        400,
+        { line, cause: error instanceof Error ? error.message : String(error) },
+        "INVALID_ITEM_ROW",
+      );
+    }
+
+    const [msku, quantityRaw, prepOwner = "SELLER", labelOwner = "SELLER", expiration = "", manufacturingLotCode = ""] = fields;
+    if (fields.length > 6) {
+      throw new SpApiError(
+        "Each item must use: MSKU, quantity, prep owner, label owner[, expiration, manufacturing lot code]",
+        400,
+        { line },
+        "INVALID_ITEM_ROW",
+      );
+    }
+
     const quantity = Number(quantityRaw);
-    if (!msku || !Number.isInteger(quantity) || quantity < 1 || quantity > 500000) {
-      throw new SpApiError("Each item must use: MSKU, quantity, prep owner, label owner[, expiration, manufacturing lot code]", 400, null, "INVALID_ITEM_ROW");
+    if (!msku || msku.length > 255 || !Number.isInteger(quantity) || quantity < 1 || quantity > maxQuantity) {
+      throw new SpApiError(
+        "Each item needs an MSKU up to 255 characters and an integer quantity between 1 and " + maxQuantity,
+        400,
+        { line, mskuLength: msku.length, quantity },
+        "INVALID_ITEM_ROW",
+      );
     }
     if (!["AMAZON", "SELLER", "NONE"].includes(prepOwner)) {
-      throw new SpApiError("Prep owner must be AMAZON, SELLER, or NONE", 400, null, "INVALID_PREP_OWNER");
+      throw new SpApiError("Prep owner must be AMAZON, SELLER, or NONE", 400, { line, prepOwner }, "INVALID_PREP_OWNER");
     }
     if (!["AMAZON", "SELLER", "NONE"].includes(labelOwner)) {
-      throw new SpApiError("Label owner must be AMAZON, SELLER, or NONE", 400, null, "INVALID_LABEL_OWNER");
+      throw new SpApiError("Label owner must be AMAZON, SELLER, or NONE", 400, { line, labelOwner }, "INVALID_LABEL_OWNER");
     }
+    const validExpiration = expiration ? preserveIsoDate(expiration) : null;
+    if (expiration && !validExpiration) {
+      throw new SpApiError("Expiration must use a real YYYY-MM-DD date", 400, { line, expiration }, "INVALID_EXPIRATION_DATE");
+    }
+    if (manufacturingLotCode.length > 256) {
+      throw new SpApiError("Manufacturing lot code must be at most 256 characters", 400, { line }, "LOT_CODE_TOO_LONG");
+    }
+
     return {
       msku,
       quantity,
       prepOwner,
       labelOwner,
-      ...(expiration ? { expiration } : {}),
+      ...(validExpiration ? { expiration: validExpiration } : {}),
       ...(manufacturingLotCode ? { manufacturingLotCode } : {}),
     };
   });
@@ -818,6 +1012,20 @@ function parseItems(value: string, max = 2000) {
   return items;
 }
 
+
+function validateInboundItems(items: ReturnType<typeof parseItems>, marketplaceId: string) {
+  if (marketplaceId === "ATVPDKIKX0DER") {
+    const invalid = items.find((item) => item.labelOwner === "AMAZON");
+    if (invalid) {
+      throw new SpApiError(
+        "Amazon does not accept labelOwner=AMAZON for US inbound-plan items. Use SELLER or NONE as allowed by the prep-details response.",
+        400,
+        { msku: invalid.msku, marketplaceId },
+        "INVALID_US_LABEL_OWNER",
+      );
+    }
+  }
+}
 
 function validateJsonListingsFeed(contentType: string, content: string) {
   if (!/^application\/json\b/i.test(contentType.trim())) {

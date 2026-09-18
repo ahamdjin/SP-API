@@ -74,7 +74,7 @@ const defaultFields: Record<string, FieldValue> = {
   details: true,
   includeOrderPii: false,
   pageSize: "20",
-  createdAfter: toLocalDateTime(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+  createdAfter: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
   createdBefore: "",
   statuses: "",
   fulfilledBy: "",
@@ -706,7 +706,7 @@ function OperationFields({
 
   const value = (key: string) => String(fields[key] ?? "");
   const text = (key: string, label: string, placeholder = "", required = false, requirement?: string) => <Field label={label} required={required} requirement={requirement}><input required={required} placeholder={placeholder} value={value(key)} onChange={(event) => updateField(key, event.target.value)} /></Field>;
-  const date = (key: string, label: string, required = false) => <Field label={label} required={required}><input required={required} placeholder="ISO 8601 · 2026-09-01T00:00:00Z" value={value(key)} onChange={(event) => updateField(key, event.target.value)} /></Field>;
+  const date = (key: string, label: string, required = false) => <Field label={label} required={required} requirement={required ? "Required · ISO 8601 + timezone" : "Optional · ISO 8601 + timezone"}><input required={required} placeholder="2026-09-01T00:00:00Z" value={value(key)} onChange={(event) => updateField(key, event.target.value)} /></Field>;
   const textarea = (key: string, label: string, placeholder = "", required = false) => <Field label={label} required={required}><textarea required={required} placeholder={placeholder} rows={5} value={value(key)} onChange={(event) => updateField(key, event.target.value)} /></Field>;
 
   let content: React.ReactNode;
@@ -742,7 +742,7 @@ function OperationFields({
       content = <>{sandboxGuide}{text("feedDocumentId", "Result feed document ID", "Use resultFeedDocumentId returned after the feed is DONE", true)}<div className="dataset-note"><Check size={15} /><span>Downloads a safe 2 MB text preview when the document URL is readable.</span></div></>;
       break;
     case "submitFeed":
-      content = <>{sandboxGuide}{text("feedType", "Feed type", "JSON_LISTINGS_FEED", true)}{text("feedMarketplaceIds", "Marketplace IDs", "Optional · defaults to selected marketplace; comma-separated")}{text("contentType", "Content type", "application/json; charset=UTF-8", true)}{textarea("content", "Feed content", "Paste the feed payload", true)}<div className="dataset-note"><Check size={15} /><span>Production uploads this content to Amazon. Static Sandbox validates the create-document/create-feed fixture but does not persist a real upload.</span></div><Confirmation fields={fields} updateField={updateField} label="I understand this uses exactly the feed values above." /></>;
+      content = <>{sandboxGuide}{text("feedType", "Feed type", "JSON_LISTINGS_FEED", true)}{text("feedMarketplaceIds", "Marketplace IDs", "Optional · defaults to selected marketplace; comma-separated")}{text("contentType", "Content type", "application/json; charset=UTF-8", true)}{textarea("content", "Feed content", "Paste the feed payload", true)}<div className="dataset-note"><Check size={15} /><span>{environment === "production" ? <>For listings changes use <strong>JSON_LISTINGS_FEED</strong>. Amazon removed the legacy XML/flat listing feed types in 2025, and the workbench blocks those removed types in Production.</> : <>Static Sandbox may require an older feed type such as <strong>POST_PRODUCT_DATA</strong> for Amazon&apos;s documented fixture. Enter the fixture values shown above; Sandbox does not persist a real upload.</>}</span></div><Confirmation fields={fields} updateField={updateField} label="I understand this uses exactly the feed values above." /></>;
       break;
     case "inboundPlans":
       content = <>{sandboxGuide}<Choice label="Plan status" options={["ACTIVE", "SHIPPED", "VOIDED"]} value={value("status")} onChange={(next) => updateField("status", next)} /><Choice label="Sort by" options={["LAST_UPDATED_TIME", "CREATION_TIME"]} value={value("sortBy")} onChange={(next) => updateField("sortBy", next)} /><Choice label="Sort order" options={["DESC", "ASC"]} value={value("sortOrder")} onChange={(next) => updateField("sortOrder", next)} />{text("pageSize", "Results per page", "Optional")}{text("inboundPaginationToken", "Next-page token", "Optional · from the previous response")}</>;
@@ -760,11 +760,11 @@ function OperationFields({
       content = <>{sandboxGuide}{textarea("mskus", "Merchant SKUs", "One MSKU per line", true)}</>;
       break;
     case "createInboundPlan":
-      content = <>{sandboxGuide}{text("planName", "Plan name", "September replenishment")}{text("destinationMarketplaces", "Destination marketplace IDs", "Optional · defaults to selected marketplace; comma-separated")}{textarea("items", "Items", "MSKU, quantity, prep owner, label owner[, expiration, manufacturing lot code]", true)}<div className="subsection-label">Ship-from address</div>{text("contactName", "Contact name", "Jane Smith", true)}{text("companyName", "Company")}{text("addressLine1", "Address line 1", "123 Main Street", true)}{text("addressLine2", "Address line 2")}{text("city", "City", "Toronto", true)}{text("districtOrCounty", "District / county")}{text("stateOrProvinceCode", "State / province", "ON")}{text("postalCode", "Postal code", "M1M 1M1", true)}{text("countryCode", "Country code", "Defaults to marketplace country")}{text("phoneNumber", "Phone number", "+1 555 0100", true)}{text("email", "Email")}<Confirmation fields={fields} updateField={updateField} label="I understand this creates an inbound plan using exactly the values above." /></>;
+      content = <>{sandboxGuide}{text("planName", "Plan name", "September replenishment")}{text("destinationMarketplaces", "Destination marketplace ID", "Optional · exactly one; defaults to selected marketplace")}{textarea("items", "Items", "MSKU, quantity, prep owner, label owner[, expiration, manufacturing lot code]. Quote an MSKU if it contains a comma.", true)}<div className="subsection-label">Ship-from address</div>{text("contactName", "Contact name", "Jane Smith", true)}{text("companyName", "Company")}{text("addressLine1", "Address line 1", "123 Main Street", true)}{text("addressLine2", "Address line 2")}{text("city", "City", "Toronto", true)}{text("districtOrCounty", "District / county")}{text("stateOrProvinceCode", "State / province", "ON")}{text("postalCode", "Postal code", "M1M 1M1", true)}{text("countryCode", "Country code", "Defaults to marketplace country")}{text("phoneNumber", "Phone number", "+1 555 0100", true)}{text("email", "Email")}<Confirmation fields={fields} updateField={updateField} label="I understand this creates an inbound plan using exactly the values above." /></>;
       break;
     case "itemLabels": {
       const thermal = value("labelType") === "THERMAL_PRINTING";
-      content = <>{sandboxGuide}{textarea("items", "Items", "MSKU, quantity", true)}<Choice label="Label format" required options={["STANDARD_FORMAT", "THERMAL_PRINTING"]} value={value("labelType")} onChange={(next) => updateField("labelType", next)} />{thermal ? <>{text("labelHeight", "Height", "25", true)}{text("labelWidth", "Width", "100", true)}</> : <Choice label="Page type" options={["A4_21", "A4_24", "A4_24_64x33", "A4_24_66x35", "A4_24_70x36", "A4_24_70x37", "A4_24i", "A4_27", "A4_40_52x29", "A4_44_48x25", "Letter_30"]} value={value("pageType")} onChange={(next) => updateField("pageType", next)} />}</>;
+      content = <>{sandboxGuide}{textarea("items", "Items", "MSKU, quantity. Quote an MSKU if it contains a comma.", true)}<Choice label="Label format" required options={["STANDARD_FORMAT", "THERMAL_PRINTING"]} value={value("labelType")} onChange={(next) => updateField("labelType", next)} />{thermal ? <>{text("labelHeight", "Height (25–100)", "25", true)}{text("labelWidth", "Width (25–100)", "100", true)}</> : <Choice label="Page type" options={["A4_21", "A4_24", "A4_24_64x33", "A4_24_66x35", "A4_24_70x36", "A4_24_70x37", "A4_24i", "A4_27", "A4_40_52x29", "A4_44_48x25", "Letter_30"]} value={value("pageType")} onChange={(next) => updateField("pageType", next)} />}</>;
       break;
     }
     case "shipmentLabels": {
@@ -1491,4 +1491,3 @@ function stringValue(value: unknown) { return typeof value === "string" ? value 
 function numberValue(value: unknown) { return typeof value === "number" ? value : null; }
 function formatMoney(value: number, currency: string) { try { return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(value); } catch { return currency + " " + value.toFixed(2); } }
 function formatLabel(value: string) { return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
-function toLocalDateTime(value: Date) { const offset = value.getTimezoneOffset() * 60_000; return new Date(value.getTime() - offset).toISOString().slice(0, 16); }

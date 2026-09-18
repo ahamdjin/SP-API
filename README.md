@@ -75,9 +75,18 @@ Open [http://localhost:3000](http://localhost:3000). Changes update automaticall
 
 ```bash
 npm run lint
+npm test
 npm run build
 npm start
 ```
+
+The regression tests cover exact ISO-8601 timestamp preservation (including static Sandbox fixtures), invalid calendar dates, and quoted CSV item rows for MSKUs that contain commas.
+
+## Deployment scope
+
+This repository is designed as a **local or private operator workbench**. It is appropriate for an internal client tool where an authorized operator supplies the app/seller credentials for the active session.
+
+Do **not** expose this exact credential-entry model as a public multi-seller SaaS application. For a public application, keep the LWA client secret only on the server, authenticate your own users, store each seller refresh token encrypted, and reference a seller connection from the browser instead of asking sellers to enter the app client secret.
 
 ## Credential handling
 
@@ -211,8 +220,8 @@ Use seller-owned data from the same marketplace selected in the workbench. IDs r
 | Get shipment | `inboundPlanId` + `shipmentId` from the plan | Shipment destination, status, tracking/transportation data |
 | Inbound operation status | `operationId` returned by an inbound write | SUCCESS / IN_PROGRESS / FAILED and any operation problems |
 | Prep details | Real MSKUs, one per line | Prep categories/types and owner constraints |
-| Create inbound plan | Real ship-from address and items as `MSKU, quantity, prepOwner, labelOwner` | `inboundPlanId` + `operationId` |
-| Item labels | `MSKU, quantity` rows, label format and page type | One or more expiring document-download URLs |
+| Create inbound plan | Real ship-from address and items as `MSKU, quantity, prepOwner, labelOwner`; quote an MSKU if it contains a comma; only one destination marketplace is supported | `inboundPlanId` + `operationId` |
+| Item labels | `MSKU, quantity` rows, label format and page type; quote an MSKU if it contains a comma; quantity max is 10,000 per MSKU | One or more expiring document-download URLs |
 | Shipment labels | Real shipment ID plus label/page type; package/pallet values when applicable | Amazon-generated label download URL |
 | Bill of lading | Real eligible shipment ID | Amazon-generated bill-of-lading URL when that shipment supports one |
 
@@ -221,6 +230,8 @@ Use seller-owned data from the same marketplace selected in the workbench. IDs r
 Start with read-only operations in this order: connection test → Catalogue item → Fee estimate → FBA inventory → Search orders (PII off) → List reports → List feeds → List inbound plans. These verify credentials, roles, marketplace routing, pagination, and response rendering without creating or changing Amazon resources.
 
 For writes, **Request report** is the safest next test because it creates a report job rather than changing a listing or shipment. Do not use **Submit feed** or **Create inbound plan** as generic connectivity tests; use them only with deliberate seller data and a payload you actually intend Amazon to process.
+
+For Production listing changes, use `JSON_LISTINGS_FEED` (or the Listings Items API for individual SKU changes). Amazon removed the legacy XML/flat listing feed types on July 31, 2025; the workbench rejects those removed listing feed types in Production while still allowing documented legacy fixture values in Static Sandbox.
 
 ## API references
 
