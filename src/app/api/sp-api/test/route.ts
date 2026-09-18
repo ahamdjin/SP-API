@@ -3,6 +3,7 @@ import { callSpApi, getAccessToken, privateHeaders, toErrorResponse } from "@/li
 
 export const dynamic = "force-dynamic";
 
+// Connection test: verifies both LWA authentication and a Sellers API request for the selected environment.
 export async function POST(request: Request) {
   try {
     const input = baseRequestSchema.parse(await request.json());
