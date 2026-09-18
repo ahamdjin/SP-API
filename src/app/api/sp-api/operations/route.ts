@@ -40,6 +40,20 @@ const itemLabelTypeValues = new Set(["STANDARD_FORMAT", "THERMAL_PRINTING"]);
 const itemLabelPageTypeValues = new Set(["A4_21", "A4_24", "A4_24_64x33", "A4_24_66x35", "A4_24_70x36", "A4_24_70x37", "A4_24i", "A4_27", "A4_40_52x29", "A4_44_48x25", "Letter_30"]);
 const shipmentLabelTypeValues = new Set(["BARCODE_2D", "UNIQUE", "PALLET"]);
 const shipmentPageTypeValues = new Set(["PackageLabel_Letter_2", "PackageLabel_Letter_4", "PackageLabel_Letter_6", "PackageLabel_Letter_6_CarrierLeft", "PackageLabel_A4_2", "PackageLabel_A4_4", "PackageLabel_Plain_Paper", "PackageLabel_Plain_Paper_CarrierBottom", "PackageLabel_Thermal", "PackageLabel_Thermal_Unified", "PackageLabel_Thermal_NonPCP", "PackageLabel_Thermal_No_Carrier_Rotation"]);
+const removedProductionListingFeedTypes = new Set([
+  "POST_PRODUCT_DATA",
+  "POST_INVENTORY_AVAILABILITY_DATA",
+  "POST_PRODUCT_OVERRIDES_DATA",
+  "POST_PRODUCT_PRICING_DATA",
+  "POST_PRODUCT_IMAGE_DATA",
+  "POST_PRODUCT_RELATIONSHIP_DATA",
+  "POST_FLAT_FILE_INVLOADER_DATA",
+  "POST_FLAT_FILE_BOOKLOADER_DATA",
+  "POST_FLAT_FILE_CONVERGENCE_LISTINGS_DATA",
+  "POST_FLAT_FILE_LISTINGS_DATA",
+  "POST_FLAT_FILE_PRICEANDQUANTITYONLY_UPDATE_DATA",
+  "POST_UIEE_BOOKLOADER_DATA",
+]);
 
 const documentPreviewLimit = 2 * 1024 * 1024;
 
@@ -332,6 +346,15 @@ function call(input: Input, path: string, method: "GET" | "POST" = "GET", body?:
 
 async function submitFeed(input: Input, fields: Fields) {
   const feedType = stringField(fields, "feedType");
+  if (input.environment === "production" && removedProductionListingFeedTypes.has(feedType)) {
+    throw new SpApiError(
+      "This legacy listings feed type was removed by Amazon on July 31, 2025. Use JSON_LISTINGS_FEED (or Listings Items API for individual SKU changes) in Production.",
+      400,
+      { feedType, replacement: "JSON_LISTINGS_FEED" },
+      "REMOVED_LISTING_FEED_TYPE",
+    );
+  }
+
   const contentType = optionalString(fields, "contentType") || "application/json; charset=UTF-8";
   const content = stringField(fields, "content");
   const marketplaceIds = csvValues(optionalString(fields, "feedMarketplaceIds"), 10);
