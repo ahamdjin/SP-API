@@ -31,6 +31,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
+import { extractCatalogItems, type CatalogItemView, type DetailRow, type ProductImage } from "@/lib/catalog-view";
 import { getMarketplace, marketplaces } from "@/lib/marketplaces";
 
 type Credentials = { clientId: string; clientSecret: string; refreshToken: string };
@@ -162,7 +163,7 @@ export function Workbench() {
   const [fees, setFees] = useState({ idType: "ASIN" as "ASIN" | "SKU", identifier: "", price: "", shipping: "0", isAmazonFulfilled: true });
 
   const marketplace = useMemo(() => getMarketplace(marketplaceId) ?? marketplaces[0], [marketplaceId]);
-  const catalogItems = useMemo(() => extractCatalogItems(result), [result]);
+  const catalogItems = useMemo(() => extractCatalogItems(result?.data), [result]);
   const catalogFamily = useMemo(() => extractCatalogFamily(result), [result]);
   const feeSummary = useMemo(() => extractFeeSummary(result), [result]);
   const credentialsComplete = Object.values(credentials).every((value) => value.trim().length > 0);
@@ -328,7 +329,7 @@ export function Workbench() {
             {result && !result.ok && <div className="error-banner"><X size={18} /><div><strong>Request failed</strong><p>{result.error ?? extractAmazonError(result.data)}</p></div></div>}
             {result?.ok && operation === "catalog" && <div className="catalog-results">
               {catalogFamily && <div className={"family-summary " + (catalogFamily.complete ? "complete" : "partial")}><strong>{catalogFamily.returnedCount} of {catalogFamily.requestedCount} related records returned</strong><span>{catalogFamily.complete ? "Complete variation and package relationship graph" : "Partial related set — see warnings in the JSON response"}</span></div>}
-              {catalogItems.length === 0 ? <p className="no-results">Amazon returned no catalogue items.</p> : catalogItems.map((item) => <CatalogResult key={item.asin} item={item} />)}
+              {catalogItems.length === 0 ? <p className="no-results">Amazon returned no catalogue items.</p> : <CatalogProductView key={catalogItems.map((item) => item.asin).join("|")} items={catalogItems} />}
             </div>}
             {result?.ok && operation === "fees" && feeSummary && <FeeResult summary={feeSummary} />}
             {result?.ok && operation !== "catalog" && operation !== "fees" && <div className="success-summary"><Check size={18} /><div><strong>Amazon accepted the request</strong><p>The complete response is available below.</p></div></div>}
@@ -503,9 +504,94 @@ function Confirmation({ fields, updateField, label }: { fields: Record<string, F
   return <div className="write-confirmation"><p><strong>*</strong> Required confirmation</p><CheckField checked={Boolean(fields.confirmed)} label={label} onChange={(checked) => updateField("confirmed", checked)} /></div>;
 }
 
-type CatalogItem = { asin: string; title: string; brand: string; productType: string; images: string[]; identifiers: string[]; datasets: string[] };
-function CatalogResult({ item }: { item: CatalogItem }) {
-  return <article className="catalog-item"><div className="product-gallery">{item.images.length ? item.images.slice(0, 6).map((image, index) => <div className="product-image" key={image}><Image src={image} alt={index === 0 ? item.title : ""} width={86} height={86} unoptimized /></div>) : <div className="product-image"><PackageSearch size={28} /></div>}</div><div className="product-copy"><div className="product-kicker"><span>{item.productType}</span><span>{item.asin}</span></div><h4>{item.title}</h4><p>{item.brand || "Brand not returned"}</p>{item.identifiers.length > 0 && <div className="identifier-list">{item.identifiers.slice(0, 8).map((identifier) => <span key={identifier}>{identifier}</span>)}</div>}<div className="dataset-list">{item.datasets.map((dataset) => <span key={dataset}>{formatLabel(dataset)}</span>)}</div></div></article>;
+function CatalogProductView({ items }: { items: CatalogItemView[] }) {
+  const [selectedAsin, setSelectedAsin] = useState(items[0]?.asin ?? "");
+  const item = items.find((candidate) => candidate.asin === selectedAsin) ?? items[0];
+  if (!item) return null;
+
+  const relatedLookup = new Set(items.map((candidate) => candidate.asin));
+  return <div className="catalog-product-view">
+    <div className="live-result-line"><span><span className="live-dot" />Live Amazon catalogue response</span><small>{items.length} product record{items.length === 1 ? "" : "s"}</small></div>
+
+    {items.length > 1 && <nav className="related-products" aria-label="Returned catalogue records">
+      <p>Returned products</p>
+      <div>{items.map((candidate) => <button className={candidate.asin === item.asin ? "selected" : ""} key={candidate.asin} onClick={() => setSelectedAsin(candidate.asin)} type="button">
+        <ProductThumb image={candidate.images[0]} title={candidate.title} />
+        <span><strong>{candidate.asin}</strong><small>{candidate.title}</small></span>
+      </button>)}</div>
+    </nav>}
+
+    <article className="product-detail">
+      <ProductGallery images={item.images} title={item.title} />
+      <div className="product-identity">
+        <p className="product-brand">{item.brand || "Brand not returned by Amazon"}</p>
+        <h3>{item.title}</h3>
+        <div className="product-meta"><span>{formatLabel(item.productType)}</span><span>ASIN {item.asin}</span></div>
+        {item.identifiers.length > 0 && <div className="identifier-list">{item.identifiers.map((identifier) => <span key={identifier}>{identifier}</span>)}</div>}
+        <div className="dataset-coverage"><strong>{item.datasets.length}/10 data groups returned</strong><span>{item.datasets.map(formatLabel).join(" · ")}</span></div>
+      </div>
+    </article>
+
+    <div className="product-information">
+      <ProductSection title="Product details" count={item.overview.length} empty="Amazon did not return summary details for this product.">
+        <DetailTable rows={item.overview} />
+      </ProductSection>
+
+      <ProductSection title="Specifications" count={item.attributes.length} empty="Amazon did not return product attributes for this product.">
+        {item.attributes.length > 0 && <details className="attribute-details" open={item.attributes.length <= 24}>
+          <summary>{item.attributes.length <= 24 ? "Specifications" : `View all ${item.attributes.length} specifications`}</summary>
+          <DetailTable rows={item.attributes} />
+        </details>}
+      </ProductSection>
+
+      <ProductSection title="Measurements" count={item.itemDimensions.length + item.packageDimensions.length} empty="Amazon did not return item or package dimensions.">
+        {(item.itemDimensions.length > 0 || item.packageDimensions.length > 0) && <div className="measurement-columns">
+          <div><h5>Item</h5><DetailTable rows={item.itemDimensions} /></div>
+          <div><h5>Package</h5><DetailTable rows={item.packageDimensions} /></div>
+        </div>}
+      </ProductSection>
+
+      <ProductSection title="Category and sales rank" count={item.classifications.length + item.salesRanks.length} empty="Amazon did not return category or sales-rank data.">
+        {item.classifications.length > 0 && <DetailTable rows={item.classifications} />}
+        {item.salesRanks.length > 0 && <div className="rank-list">{item.salesRanks.map((rank, index) => <div key={`${rank.title}-${rank.rank}-${index}`}><span><small>{rank.group}</small>{rank.title}</span><strong>#{new Intl.NumberFormat().format(rank.rank)}</strong></div>)}</div>}
+      </ProductSection>
+
+      <ProductSection title="Related products" count={item.relationships.length} empty="Amazon did not return variation or package relationships.">
+        {item.relationships.length > 0 && <div className="relationship-list">{item.relationships.map((relationship, index) => {
+          const label = <><span><strong>{relationship.direction}</strong>{relationship.type}{relationship.variationTheme ? ` · ${relationship.variationTheme}` : ""}</span><code>{relationship.asin}</code></>;
+          return relatedLookup.has(relationship.asin)
+            ? <button key={`${relationship.asin}-${index}`} onClick={() => setSelectedAsin(relationship.asin)} type="button">{label}</button>
+            : <div key={`${relationship.asin}-${index}`}>{label}</div>;
+        })}</div>}
+      </ProductSection>
+
+      <ProductSection title="Vendor details" count={item.vendorDetails.length} empty="Amazon did not return vendor-only details for this account or product.">
+        <DetailTable rows={item.vendorDetails} />
+      </ProductSection>
+    </div>
+  </div>;
+}
+
+function ProductGallery({ images, title }: { images: ProductImage[]; title: string }) {
+  const [selectedImage, setSelectedImage] = useState(images[0]?.link ?? "");
+  const active = images.find((image) => image.link === selectedImage) ?? images[0];
+  return <div className="product-gallery-large">
+    <div className="product-main-image">{active ? <Image alt={title} fill priority sizes="(max-width: 640px) 86vw, 380px" src={active.link} unoptimized /> : <div className="image-missing"><PackageSearch size={42} /><span>No image returned</span></div>}</div>
+    {images.length > 1 && <div className="product-thumbnails" aria-label="Product images">{images.map((image, index) => <button aria-label={`View ${image.variant.toLowerCase()} image`} className={image.link === active?.link ? "selected" : ""} key={image.link} onClick={() => setSelectedImage(image.link)} type="button"><Image alt="" height={58} src={image.link} unoptimized width={58} /><span>{index + 1}</span></button>)}</div>}
+  </div>;
+}
+
+function ProductThumb({ image, title }: { image?: ProductImage; title: string }) {
+  return <span className="related-thumb">{image ? <Image alt="" height={48} src={image.link} unoptimized width={48} /> : <PackageSearch aria-label={title} size={20} />}</span>;
+}
+
+function ProductSection({ title, count, empty, children }: { title: string; count: number; empty: string; children: React.ReactNode }) {
+  return <section className="product-section"><div className="product-section-heading"><h4>{title}</h4><span>{count}</span></div>{count > 0 ? children : <p className="section-empty">{empty}</p>}</section>;
+}
+
+function DetailTable({ rows }: { rows: DetailRow[] }) {
+  if (rows.length === 0) return null;
+  return <dl className="detail-table">{rows.map((row, index) => <div key={`${row.label}-${index}`}><dt>{row.label}</dt><dd>{row.value}</dd></div>)}</dl>;
 }
 
 type FeeSummary = { status: string; amount: number | null; currency: string; details: Array<{ type: string; amount: number | null; currency: string }> };
@@ -520,47 +606,12 @@ async function postJson(url: string, payload: unknown): Promise<ApiResult> {
   return data;
 }
 
-function extractCatalogItems(result: ApiResult | null): CatalogItem[] {
-  if (!result?.ok || !isRecord(result.data) || !Array.isArray(result.data.items)) return [];
-  return result.data.items.map((raw): CatalogItem | null => {
-    if (!isRecord(raw) || typeof raw.asin !== "string") return null;
-    const summaries = Array.isArray(raw.summaries) ? raw.summaries : [];
-    const summary = summaries.find(isRecord) ?? {};
-    const images = Array.isArray(raw.images) ? raw.images : [];
-    const imageGroup = images.find(isRecord);
-    const imageList = imageGroup && Array.isArray(imageGroup.images) ? imageGroup.images : [];
-    const imageEntries = imageList.filter(isRecord);
-    const mainImage = imageEntries.find((entry) => entry.variant === "MAIN");
-    const orderedImages = mainImage ? [mainImage, ...imageEntries.filter((entry) => entry !== mainImage)] : imageEntries;
-    const imageLinks = [...new Set(orderedImages.map((entry) => stringValue(entry.link)).filter(Boolean))];
-    const productTypes = Array.isArray(raw.productTypes) ? raw.productTypes : [];
-    const productType = productTypes.find(isRecord);
-    const datasets = ["attributes", "classifications", "dimensions", "identifiers", "images", "productTypes", "relationships", "salesRanks", "summaries", "vendorDetails"].filter((key) => raw[key] !== undefined);
-    return { asin: raw.asin, title: stringValue(summary.itemName) || "Untitled catalogue item", brand: stringValue(summary.brand), productType: productType ? stringValue(productType.productType) || "PRODUCT" : "PRODUCT", images: imageLinks, identifiers: collectIdentifiers(raw.identifiers), datasets };
-  }).filter((item): item is CatalogItem => item !== null);
-}
-
 type CatalogFamily = { requestedCount: number; returnedCount: number; complete: boolean };
 function extractCatalogFamily(result: ApiResult | null): CatalogFamily | null {
   if (!result?.ok || !isRecord(result.data) || !isRecord(result.data.family)) return null;
   const family = result.data.family;
   if (typeof family.requestedCount !== "number" || typeof family.returnedCount !== "number" || typeof family.complete !== "boolean") return null;
   return { requestedCount: family.requestedCount, returnedCount: family.returnedCount, complete: family.complete };
-}
-
-function collectIdentifiers(value: unknown) {
-  if (!Array.isArray(value)) return [];
-  const output: string[] = [];
-  for (const group of value) {
-    if (!isRecord(group) || !Array.isArray(group.identifiers)) continue;
-    for (const identifier of group.identifiers) {
-      if (!isRecord(identifier)) continue;
-      const type = stringValue(identifier.identifierType);
-      const id = stringValue(identifier.identifier);
-      if (type && id) output.push(type + " · " + id);
-    }
-  }
-  return output;
 }
 
 function extractFeeSummary(result: ApiResult | null): FeeSummary | null {
