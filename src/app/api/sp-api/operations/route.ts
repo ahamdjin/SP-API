@@ -57,12 +57,14 @@ const removedProductionListingFeedTypes = new Set([
 
 const documentPreviewLimit = 2 * 1024 * 1024;
 
+// Main operation router: validates the workbench request and maps each action to its Amazon SP-API endpoint.
 export async function POST(request: Request) {
   try {
     const input = operationRequestSchema.parse(await request.json());
     const fields = input.fields;
     let result;
 
+    // Each case builds only the parameters/body required by that Amazon operation.
     switch (input.operation) {
       case "inventory": {
         const params = new URLSearchParams({
@@ -340,6 +342,7 @@ type Input = ReturnType<typeof operationRequestSchema.parse>;
 type Fields = Record<string, unknown>;
 type CallResult = Awaited<ReturnType<typeof call>>;
 
+// Thin helper that sends operation requests through the shared authenticated SP-API transport.
 function call(input: Input, path: string, method: "GET" | "POST" = "GET", body?: unknown) {
   return callSpApi({
     credentials: input,
@@ -351,6 +354,7 @@ function call(input: Input, path: string, method: "GET" | "POST" = "GET", body?:
   });
 }
 
+// Feed workflow: create upload document -> upload content in Production -> create feed job.
 async function submitFeed(input: Input, fields: Fields) {
   const feedType = stringField(fields, "feedType");
   if (input.environment === "production" && removedProductionListingFeedTypes.has(feedType)) {
@@ -424,6 +428,7 @@ async function submitFeed(input: Input, fields: Fields) {
   };
 }
 
+// Retrieves Amazon document metadata, keeps the original URL, and downloads a bounded text preview when possible.
 async function getAndDownloadDocument(input: Input, path: string, label: string): Promise<CallResult> {
   const metadata = await call(input, path);
   if (!metadata.ok) return metadata;
@@ -619,6 +624,7 @@ function validateOptionalRange(start: string | undefined, end: string | undefine
   }
 }
 
+// Converts asynchronous Amazon states into clear next-step guidance for reports, feeds, and inbound operations.
 function applyBusinessOutcome(input: Input, result: CallResult): CallResult {
   const operation = input.operation;
   if (!result.ok) return result;
