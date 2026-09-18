@@ -152,6 +152,170 @@ const operationGroups: Array<{ label: string; items: OperationItem[] }> = [
   },
 ];
 
+
+type ResponseContract = {
+  request: string;
+  delivery: string;
+  returns: string[];
+  next: string;
+  pagination?: string;
+  note?: string;
+};
+
+const responseContracts: Record<Operation, ResponseContract> = {
+  catalog: {
+    request: "GET Catalog Items 2022-04-01",
+    delivery: "Immediate JSON response",
+    returns: ["items[] / item", "images", "identifiers", "dimensions", "relationships", "sales ranks", "attributes and summaries"],
+    next: "Use related ASINs or the returned catalog pagination token when available.",
+    pagination: "pagination.nextToken",
+    note: "Exact ASIN lookup can recursively fetch related variation/package ASINs in Production.",
+  },
+  fees: {
+    request: "POST Product Fees v0",
+    delivery: "Immediate JSON response",
+    returns: ["payload.FeesEstimateResult.Status", "FeesEstimateIdentifier", "TotalFeesEstimate", "FeeDetailList", "embedded business error"],
+    next: "Use the fee estimate as pricing guidance; Amazon notes that actual charged fees can differ.",
+  },
+  inventory: {
+    request: "GET /fba/inventory/v1/summaries",
+    delivery: "Immediate JSON response",
+    returns: ["payload.granularity", "payload.inventorySummaries[]", "inventoryDetails quantities", "pagination.nextToken"],
+    next: "Use pagination.nextToken to continue. Dynamic Sandbox inventory can legitimately be empty.",
+    pagination: "pagination.nextToken",
+  },
+  orders: {
+    request: "GET /orders/2026-01-01/orders",
+    delivery: "Immediate JSON response",
+    returns: ["orders[]", "orderItems", "buyer / recipient", "proceeds / payment / tax", "fulfillment / packages", "pagination.nextToken"],
+    next: "Open an order by orderId or continue with pagination.nextToken.",
+    pagination: "pagination.nextToken",
+  },
+  order: {
+    request: "GET /orders/2026-01-01/orders/{orderId}",
+    delivery: "Immediate JSON response",
+    returns: ["order", "orderItems", "buyer / recipient", "proceeds / payment / tax", "fulfillment / packages / fulfillmentOrders"],
+    next: "The Result tab shows the order summary/items; All returned data shows every included data group Amazon returned.",
+  },
+  reports: {
+    request: "GET /reports/2021-06-30/reports",
+    delivery: "Immediate JSON response",
+    returns: ["reports[]", "reportId", "reportType", "processingStatus", "reportDocumentId when available", "nextToken"],
+    next: "Open a report status. For another page, Amazon requires nextToken as the only filter parameter.",
+    pagination: "nextToken",
+  },
+  createReport: {
+    request: "POST /reports/2021-06-30/reports",
+    delivery: "Asynchronous job",
+    returns: ["reportId"],
+    next: "Poll Report status until DONE, FATAL, or CANCELLED. DONE should provide reportDocumentId.",
+  },
+  report: {
+    request: "GET /reports/2021-06-30/reports/{reportId}",
+    delivery: "Job status JSON",
+    returns: ["processingStatus", "reportId", "reportType", "timestamps", "marketplaceIds", "reportDocumentId when DONE"],
+    next: "When DONE, open reportDocumentId to retrieve the presigned Amazon document URL and preview.",
+  },
+  reportDocument: {
+    request: "GET /reports/2021-06-30/documents/{reportDocumentId}",
+    delivery: "JSON metadata + presigned document URL",
+    returns: ["reportDocumentId", "url", "compressionAlgorithm", "downloaded content preview", "content type / disposition"],
+    next: "Open/download the original Amazon URL. The workbench also previews up to 2 MB of text.",
+  },
+  feeds: {
+    request: "GET /feeds/2021-06-30/feeds",
+    delivery: "Immediate JSON response",
+    returns: ["feeds[]", "feedId", "feedType", "processingStatus", "resultFeedDocumentId when available", "nextToken"],
+    next: "Open a feed status. For another page, Amazon requires nextToken as the only filter parameter.",
+    pagination: "nextToken",
+  },
+  feed: {
+    request: "GET /feeds/2021-06-30/feeds/{feedId}",
+    delivery: "Job status JSON",
+    returns: ["feedId", "feedType", "marketplaceIds", "processingStatus", "timestamps", "resultFeedDocumentId"],
+    next: "When DONE, inspect resultFeedDocumentId. A DONE feed can still contain record-level errors.",
+  },
+  feedDocument: {
+    request: "GET /feeds/2021-06-30/documents/{feedDocumentId}",
+    delivery: "JSON metadata + presigned processing-report URL",
+    returns: ["feedDocumentId", "url", "compressionAlgorithm", "downloaded processing report preview"],
+    next: "Review record-level processing errors before treating submitted records as successful.",
+  },
+  submitFeed: {
+    request: "POST feed document → PUT content → POST feed",
+    delivery: "Multi-step asynchronous workflow",
+    returns: ["inputFeedDocumentId", "feedId", "upload verification / next step"],
+    next: "Poll Feed status, then open resultFeedDocumentId when processing is DONE.",
+  },
+  inboundPlans: {
+    request: "GET /inbound/fba/2024-03-20/inboundPlans",
+    delivery: "Immediate JSON response",
+    returns: ["inboundPlans[]", "plan IDs / names / status", "sourceAddress", "pagination.nextToken"],
+    next: "Open an inbound plan or continue with pagination.nextToken.",
+    pagination: "pagination.nextToken",
+  },
+  inboundPlan: {
+    request: "GET /inbound/fba/2024-03-20/inboundPlans/{inboundPlanId}",
+    delivery: "Immediate JSON response",
+    returns: ["plan identity/status", "sourceAddress", "packingOptions", "placementOptions", "shipments[]"],
+    next: "Open a returned shipment for destination, tracking, transportation and document actions.",
+  },
+  inboundShipment: {
+    request: "GET /inbound/fba/2024-03-20/inboundPlans/{inboundPlanId}/shipments/{shipmentId}",
+    delivery: "Immediate JSON response",
+    returns: ["shipment status/IDs", "source/destination", "dates", "trackingDetails", "freightInformation", "selected transportation/delivery", "contact/appointments"],
+    next: "Use the shipment ID for labels or bill of lading when Amazon makes those documents available.",
+  },
+  inboundOperationStatus: {
+    request: "GET /inbound/fba/2024-03-20/operations/{operationId}",
+    delivery: "Asynchronous operation status JSON",
+    returns: ["operationId", "operation", "operationStatus", "operationProblems[]"],
+    next: "Continue only after SUCCESS. On FAILED, correct every operationProblem before starting another write.",
+  },
+  prepDetails: {
+    request: "GET /inbound/fba/2024-03-20/items/prepDetails",
+    delivery: "Immediate JSON response",
+    returns: ["mskuPrepDetails[]", "prepCategory", "prepTypes", "prep owner constraints", "label owner constraints"],
+    next: "Use these constraints when building the inbound-plan item payload.",
+  },
+  createInboundPlan: {
+    request: "POST /inbound/fba/2024-03-20/inboundPlans",
+    delivery: "Asynchronous write",
+    returns: ["inboundPlanId", "operationId"],
+    next: "Poll operationId until SUCCESS, then retrieve inboundPlanId.",
+  },
+  itemLabels: {
+    request: "POST /inbound/fba/2024-03-20/items/labels",
+    delivery: "Immediate document metadata",
+    returns: ["documentDownloads[]", "uri", "downloadType", "expiration"],
+    next: "Open/download each returned label URL before it expires.",
+  },
+  shipmentLabels: {
+    request: "GET /fba/inbound/v0/shipments/{shipmentId}/labels",
+    delivery: "Immediate legacy document response",
+    returns: ["payload.DownloadURL", "errors[] when applicable"],
+    next: "Open/download Amazon's generated package/2D/pallet-label document.",
+  },
+  billOfLading: {
+    request: "GET /fba/inbound/v0/shipments/{shipmentId}/billOfLading",
+    delivery: "Immediate legacy document response",
+    returns: ["payload.DownloadURL", "errors[] when applicable"],
+    next: "Open/download Amazon's generated bill of lading.",
+  },
+  legacyConvert: {
+    request: "Private SQL workflow",
+    delivery: "Not an SP-API operation",
+    returns: ["Requires original company database schema and rules"],
+    next: "Connect the legacy database safely before implementing this action.",
+  },
+  legacyFc: {
+    request: "Private SQL workflow",
+    delivery: "Not an SP-API operation",
+    returns: ["Requires SkuType / fulfillment-centre tables and business rules"],
+    next: "Connect the legacy database safely before implementing this action.",
+  },
+};
+
 export function Workbench() {
   const [credentials, setCredentials] = useState(initialCredentials);
   const [environment, setEnvironment] = useState<SpApiEnvironment>("sandbox");
@@ -181,6 +345,12 @@ export function Workbench() {
   const catalogItems = useMemo(() => extractCatalogItems(result?.data), [result]);
   const catalogFamily = useMemo(() => extractCatalogFamily(result), [result]);
   const feeSummary = useMemo(() => extractFeeSummary(result), [result]);
+  const catalogNextPageToken = useMemo(() => {
+    if (!result?.ok || !isRecord(result.data)) return "";
+    const pagination = isRecord(result.data.pagination) ? result.data.pagination : {};
+    return stringValue(pagination.nextToken);
+  }, [result]);
+  const responseWarnings = useMemo(() => extractResponseWarnings(result?.data), [result]);
   const credentialsComplete = Object.values(credentials).every((value) => value.trim().length > 0);
   const activeItem = operationGroups.flatMap((group) => group.items).find((item) => item.id === operation)!;
   const ActiveIcon = activeItem.icon;
@@ -200,6 +370,13 @@ export function Workbench() {
   function followOperation(nextOperation: Operation, patch: Record<string, FieldValue> = {}) {
     setFields((current) => ({ ...current, ...patch, confirmed: false }));
     setOperation(nextOperation);
+    setResult(null);
+    window.setTimeout(() => document.querySelector(".request-form")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }
+
+  function prepareCatalogNextPage() {
+    if (!catalogNextPageToken) return;
+    setCatalog((current) => ({ ...current, pageToken: catalogNextPageToken }));
     setResult(null);
     window.setTimeout(() => document.querySelector(".request-form")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   }
@@ -339,7 +516,20 @@ export function Workbench() {
             <span className="region-label">{environment.toUpperCase()} · {marketplace.name} / {marketplace.region.toUpperCase()}</span>
           </div>
 
-          <OperationPicker active={operation} onChange={(next) => { setOperation(next); setResult(null); setFields((current) => ({ ...current, confirmed: false })); }} />
+          <OperationPicker active={operation} onChange={(next) => {
+            setOperation(next);
+            setResult(null);
+            setFields((current) => ({
+              ...current,
+              confirmed: false,
+              inventoryNextToken: "",
+              orderPaginationToken: "",
+              reportNextToken: "",
+              feedNextToken: "",
+              inboundPaginationToken: "",
+            }));
+            setCatalog((current) => ({ ...current, pageToken: "" }));
+          }} />
 
           <form className="request-form" onSubmit={runRequest}>
             <div className="request-intro">
@@ -354,6 +544,7 @@ export function Workbench() {
               <span className={"operation-badge " + activeItem.kind}>{activeItem.kind}</span>
             </div>
 
+            <ResponseContractCard operation={operation} />
             {activeItem.kind !== "legacy" && <RequirementLegend />}
 
             <OperationFields
@@ -380,17 +571,20 @@ export function Workbench() {
           <div className="result-area">
             <div className="result-heading">
               <div><span className="section-index">03</span><h2>Result</h2></div>
-              {result && <div className="request-meta">{typeof result.status === "number" && <span className={result.ok ? "status-success" : "status-error"}>{result.status} {result.statusText}</span>}{typeof result.durationMs === "number" && <span>{result.durationMs} ms</span>}{typeof result.attempts === "number" && result.attempts > 1 && <span>{result.attempts} attempts</span>}{result.rateLimit && <span>{result.rateLimit} req/s</span>}</div>}
+              {result && <div className="request-meta">{typeof result.status === "number" && <span className={result.ok ? "status-success" : "status-error"}>{result.status} {result.statusText}</span>}{typeof result.durationMs === "number" && <span>{result.durationMs} ms</span>}{typeof result.attempts === "number" && result.attempts > 1 && <span>{result.attempts} attempts</span>}{result.rateLimit && <span>{result.rateLimit} req/s</span>}{result.requestId && <span>Request {result.requestId}</span>}</div>}
             </div>
             {!result && !isLoading && <div className="empty-state"><Braces size={24} /><p>Run the selected operation to inspect Amazon&apos;s response.</p></div>}
             {isLoading && <div className="empty-state loading-state"><LoaderCircle className="spin" size={24} /><p>Waiting for Amazon…</p></div>}
             {result && !result.ok && <div className="error-banner"><X size={18} /><div><strong>{result.problem?.code ? "Request failed · " + result.problem.code : "Request failed"}</strong><p>{result.problem?.message ?? result.error ?? extractAmazonError(result.data)}</p>{result.problem?.details && <p><strong>Details:</strong> {result.problem.details}</p>}{result.problem?.action && <p><strong>What to do:</strong> {result.problem.action}</p>}{result.problem && <p><strong>Automatic retry:</strong> {result.problem.retryable ? "Safe with backoff." : "Not recommended until the cause/state is verified."}</p>}{result.requestId && <p><strong>Amazon request ID:</strong> <code>{result.requestId}</code></p>}{!result.requestId && result.gatewayId && <p><strong>Amazon gateway ID:</strong> <code>{result.gatewayId}</code></p>}</div></div>}
+            {result?.ok && responseWarnings.length > 0 && <div className="warning-stack">{responseWarnings.map((warning, index) => <div className="warning-banner" key={warning.code + "-" + index}><FileSearch size={17} /><div><strong>{warning.code}</strong><p>{warning.message}</p>{warning.details && <p>{warning.details}</p>}</div></div>)}</div>}
             {result?.ok && operation === "catalog" && <div className="catalog-results">
               {catalogFamily && <><div className={"family-summary " + (catalogFamily.complete ? "complete" : "partial")}><strong>{catalogFamily.returnedCount} of {catalogFamily.requestedCount} related records returned</strong><span>{catalogFamily.complete ? "Complete variation and package relationship graph" : "Partial related set — one or more related-ASIN calls failed"}</span></div>{catalogFamily.warnings.map((warning, index) => <div className="error-banner" key={warning.code + "-" + index}><X size={18} /><div><strong>Related product lookup · {warning.code}</strong><p>{warning.message}</p><p><strong>What to do:</strong> {warning.action}</p>{warning.requestId && <p><strong>Amazon request ID:</strong> <code>{warning.requestId}</code></p>}</div></div>)}</>}
               {catalogItems.length === 0 ? <p className="no-results">Amazon returned no catalogue items.</p> : <CatalogProductView key={catalogItems.map((item) => item.asin).join("|")} items={catalogItems} />}
+              {environment === "production" && catalogNextPageToken && <ActionRow><button className="workflow-action primary" type="button" onClick={prepareCatalogNextPage}><ArrowRight size={15} /> Prepare next catalogue page</button></ActionRow>}
             </div>}
             {result?.ok && operation === "fees" && feeSummary && <FeeResult summary={feeSummary} />}
             {result?.ok && operation !== "catalog" && operation !== "fees" && <OperationResult environment={environment} operation={operation} result={result} fields={fields} onFollow={followOperation} />}
+            {result?.ok && <ReturnedDataPanel data={result.data} />}
           </div>
         </section>
 
@@ -405,6 +599,33 @@ export function Workbench() {
       </div>
     </main>
   );
+}
+
+
+function ResponseContractCard({ operation }: { operation: Operation }) {
+  const contract = responseContracts[operation];
+  return <div className="response-contract">
+    <div className="response-contract-head">
+      <div><span>Request / response contract</span><code>{contract.request}</code></div>
+      <strong>{contract.delivery}</strong>
+    </div>
+    <div className="response-contract-body">
+      <div>
+        <small>Amazon returns</small>
+        <div className="response-field-chips">{contract.returns.map((value) => <span key={value}>{value}</span>)}</div>
+      </div>
+      <p><strong>Then:</strong> {contract.next}</p>
+      {contract.pagination && <p><strong>Pagination:</strong> <code>{contract.pagination}</code></p>}
+      {contract.note && <p className="contract-note">{contract.note}</p>}
+    </div>
+  </div>;
+}
+
+function ReturnedDataPanel({ data }: { data: unknown }) {
+  return <details className="returned-data-panel">
+    <summary><Braces size={15} /><span><strong>All returned data</strong><small>Complete Amazon data payload for this request</small></span></summary>
+    <pre><code>{JSON.stringify(data, null, 2)}</code></pre>
+  </details>;
 }
 
 function OperationPicker({ active, onChange }: { active: Operation; onChange: (operation: Operation) => void }) {
@@ -448,16 +669,16 @@ function OperationFields({
   currency: string;
 }) {
   if (operation === "catalog") return <div className="operation-fields">
-    <Choice label="Search mode" required options={["identifier", "keywords"]} value={catalog.mode} onChange={(value) => setCatalog((current) => ({ ...current, mode: value as "identifier" | "keywords" }))} />
+    <Choice label="Search mode" required options={["identifier", "keywords"]} value={catalog.mode} onChange={(value) => setCatalog((current) => ({ ...current, mode: value as "identifier" | "keywords", pageToken: "" }))} />
     {environment === "sandbox" ? <div className="dataset-note"><Check size={15} /><span>{catalog.mode === "keywords" ? <>Static Sandbox automatically uses Amazon&apos;s <strong>samsung + tv</strong> keyword example.</> : <>Static Sandbox automatically uses Amazon&apos;s US product example <strong>B07N4M94X4</strong>.</>}</span></div> : <>
-      {catalog.mode === "identifier" && <Choice label="Identifier type" required options={["ASIN", "UPC", "EAN", "GTIN", "ISBN", "SKU", "JAN", "MINSAN"]} value={catalog.identifierType} onChange={(value) => setCatalog((current) => ({ ...current, identifierType: value }))} />}
-      <Field label={catalog.mode === "keywords" ? "Search terms" : "Product identifier(s)"} required><input required placeholder={catalog.mode === "keywords" ? "wireless barcode scanner" : "One value, or up to 20 separated by commas"} value={catalog.query} onChange={(event) => setCatalog((current) => ({ ...current, query: event.target.value }))} /></Field>
+      {catalog.mode === "identifier" && <Choice label="Identifier type" required options={["ASIN", "UPC", "EAN", "GTIN", "ISBN", "SKU", "JAN", "MINSAN"]} value={catalog.identifierType} onChange={(value) => setCatalog((current) => ({ ...current, identifierType: value, pageToken: "" }))} />}
+      <Field label={catalog.mode === "keywords" ? "Search terms" : "Product identifier(s)"} required><input required placeholder={catalog.mode === "keywords" ? "wireless barcode scanner" : "One value, or up to 20 separated by commas"} value={catalog.query} onChange={(event) => setCatalog((current) => ({ ...current, query: event.target.value, pageToken: "" }))} /></Field>
       {catalog.identifierType === "SKU" && catalog.mode === "identifier" && <Field label="Seller ID" required requirement="Required for SKU"><input required placeholder="A1XXXXXXXXXXXX" value={catalog.sellerId} onChange={(event) => setCatalog((current) => ({ ...current, sellerId: event.target.value }))} /></Field>}
       {catalog.mode === "identifier" && catalog.identifierType === "ASIN" && <CheckField label="Fetch every related variation and package ASIN for one ASIN" checked={catalog.includeVariations} onChange={(checked) => setCatalog((current) => ({ ...current, includeVariations: checked }))} />}
       {catalog.mode === "keywords" && <>
-        <Field label="Brand names"><input placeholder="Optional · Samsung, Apple" value={catalog.brandNames} onChange={(event) => setCatalog((current) => ({ ...current, brandNames: event.target.value }))} /></Field>
-        <Field label="Classification IDs"><input placeholder="Optional · comma-separated" value={catalog.classificationIds} onChange={(event) => setCatalog((current) => ({ ...current, classificationIds: event.target.value }))} /></Field>
-        <Field label="Results per page"><input max="20" min="1" type="number" value={catalog.pageSize} onChange={(event) => setCatalog((current) => ({ ...current, pageSize: event.target.value }))} /></Field>
+        <Field label="Brand names"><input placeholder="Optional · Samsung, Apple" value={catalog.brandNames} onChange={(event) => setCatalog((current) => ({ ...current, brandNames: event.target.value, pageToken: "" }))} /></Field>
+        <Field label="Classification IDs"><input placeholder="Optional · comma-separated" value={catalog.classificationIds} onChange={(event) => setCatalog((current) => ({ ...current, classificationIds: event.target.value, pageToken: "" }))} /></Field>
+        <Field label="Results per page"><input max="20" min="1" type="number" value={catalog.pageSize} onChange={(event) => setCatalog((current) => ({ ...current, pageSize: event.target.value, pageToken: "" }))} /></Field>
         <Field label="Next-page token"><input placeholder="From the previous response" value={catalog.pageToken} onChange={(event) => setCatalog((current) => ({ ...current, pageToken: event.target.value }))} /></Field>
       </>}
       <div className="dataset-note"><Check size={15} /><span>Requests attributes, classifications, dimensions, identifiers, images, product types, relationships, sales ranks, summaries, and vendor details.</span></div>
@@ -763,12 +984,14 @@ function OperationResult({
 
   if (operation === "reports") {
     const reports = arrayRecords(data.reports);
+    const pageToken = stringValue(data.nextToken);
     return <div className="workflow-results">
       <SuccessLead title={String(reports.length) + " report job" + (reports.length === 1 ? "" : "s") + " returned"} copy="Pick a report to inspect its current processing state. DONE reports can expose a document ID." />
       <RecordList records={reports} idKey="reportId" titleKey="reportType" statusKey="processingStatus" onOpen={(record) => {
         const reportId = stringValue(record.reportId);
         if (reportId) onFollow("report", { reportId });
       }} actionLabel="Open status" />
+      {pageToken && environment === "production" && <PaginationResult token={pageToken} onNext={() => onFollow("reports", { reportNextToken: pageToken })} />}
       {reports.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
@@ -800,12 +1023,14 @@ function OperationResult({
 
   if (operation === "feeds") {
     const feeds = arrayRecords(data.feeds);
+    const pageToken = stringValue(data.nextToken);
     return <div className="workflow-results">
       <SuccessLead title={String(feeds.length) + " feed job" + (feeds.length === 1 ? "" : "s") + " returned"} copy="Open a feed to inspect processing and its result document." />
       <RecordList records={feeds} idKey="feedId" titleKey="feedType" statusKey="processingStatus" onOpen={(record) => {
         const feedId = stringValue(record.feedId);
         if (feedId) onFollow("feed", { feedId });
       }} actionLabel="Open status" />
+      {pageToken && environment === "production" && <PaginationResult token={pageToken} onNext={() => onFollow("feeds", { feedNextToken: pageToken })} />}
       {feeds.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
@@ -825,7 +1050,7 @@ function OperationResult({
 
   if (operation === "inboundOperationStatus") {
     const status = stringValue(data.operationStatus) || "UNKNOWN";
-    const operationId = stringFieldValue(fields, "operationId");
+    const operationId = stringValue(data.operationId) || stringFieldValue(fields, "operationId");
     return <div className="workflow-results">
       <StatusHero label="Inbound operation" status={status} id={operationId} />
       <ResultDetails rows={rowsFrom(data, ["operationStatus"])} />
@@ -841,12 +1066,15 @@ function OperationResult({
 
   if (operation === "inboundPlans") {
     const plans = arrayRecords(data.inboundPlans);
+    const pagination = isRecord(data.pagination) ? data.pagination : {};
+    const pageToken = stringValue(pagination.nextToken);
     return <div className="workflow-results">
       <SuccessLead title={String(plans.length) + " inbound plan" + (plans.length === 1 ? "" : "s") + " returned"} copy="Open a plan to inspect its shipments and current state." />
       <RecordList records={plans} idKey="inboundPlanId" titleKey="name" statusKey="status" onOpen={(record) => {
         const inboundPlanId = stringValue(record.inboundPlanId);
         if (inboundPlanId) onFollow("inboundPlan", { inboundPlanId });
       }} actionLabel="Open plan" />
+      {pageToken && environment === "production" && <PaginationResult token={pageToken} onNext={() => onFollow("inboundPlans", { inboundPaginationToken: pageToken })} />}
       {plans.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
@@ -854,9 +1082,18 @@ function OperationResult({
   if (operation === "inboundPlan") {
     const inboundPlanId = stringValue(data.inboundPlanId) || stringFieldValue(fields, "inboundPlanId");
     const shipments = arrayRecords(data.shipments);
+    const sourceAddress = isRecord(data.sourceAddress) ? data.sourceAddress : {};
+    const packingOptions = arrayRecords(data.packingOptions);
+    const placementOptions = arrayRecords(data.placementOptions);
     return <div className="workflow-results">
       <StatusHero label={stringValue(data.name) || "Inbound plan"} status={stringValue(data.status) || "UNKNOWN"} id={inboundPlanId} />
-      <ResultDetails rows={rowsFrom(data, ["createdAt", "lastUpdatedAt", "marketplaceIds"])} />
+      <ResultDetails rows={[
+        ...rowsFrom(data, ["createdAt", "lastUpdatedAt", "marketplaceIds"]),
+        { label: "Ship from", value: addressSummary(sourceAddress) || "Not returned" },
+        { label: "Packing options", value: String(packingOptions.length) },
+        { label: "Placement options", value: String(placementOptions.length) },
+        { label: "Shipments", value: String(shipments.length) },
+      ]} />
       {shipments.length > 0 && <RecordList records={shipments} idKey="shipmentId" titleKey="name" statusKey="status" onOpen={(record) => {
         const shipmentId = stringValue(record.shipmentId);
         if (shipmentId && inboundPlanId) onFollow("inboundShipment", { inboundPlanId, shipmentId });
@@ -868,9 +1105,17 @@ function OperationResult({
   if (operation === "inboundShipment") {
     const inboundPlanId = stringValue(data.inboundPlanId) || stringFieldValue(fields, "inboundPlanId");
     const shipmentId = stringValue(data.shipmentId) || stringFieldValue(fields, "shipmentId");
+    const source = isRecord(data.source) ? data.source : {};
+    const destination = isRecord(data.destination) ? data.destination : {};
+    const sourceAddress = isRecord(source.address) ? source.address : {};
+    const destinationAddress = isRecord(destination.address) ? destination.address : {};
     return <div className="workflow-results">
       <StatusHero label={stringValue(data.name) || "Inbound shipment"} status={stringValue(data.status) || "RETURNED"} id={shipmentId} />
-      <ResultDetails rows={topLevelRows(data)} />
+      <ResultDetails rows={[
+        ...rowsFrom(data, ["shipmentConfirmationId", "amazonReferenceId", "placementOptionId", "selectedTransportationOptionId"]),
+        { label: "Source", value: addressSummary(sourceAddress) || stringValue(source.sourceType) || "Not returned" },
+        { label: "Destination", value: [stringValue(destination.warehouseId), addressSummary(destinationAddress)].filter(Boolean).join(" · ") || "Not returned" },
+      ]} />
       {shipmentId && <ActionRow>
         <button className="workflow-action primary" type="button" onClick={() => onFollow("shipmentLabels", { shipmentId })}><Download size={15} /> Get shipment labels</button>
         <button className="workflow-action" type="button" onClick={() => onFollow("billOfLading", { shipmentId })}><FileSearch size={15} /> Get bill of lading</button>
@@ -881,6 +1126,8 @@ function OperationResult({
 
   if (operation === "orders") {
     const orders = arrayRecords(data.orders);
+    const pagination = isRecord(data.pagination) ? data.pagination : {};
+    const pageToken = stringValue(pagination.nextToken);
     const orderRows = orders.map((order) => {
       const fulfillment = isRecord(order.fulfillment) ? order.fulfillment : {};
       return { ...order, displayStatus: stringValue(fulfillment.fulfillmentStatus) || stringValue(order.orderStatus) };
@@ -891,16 +1138,38 @@ function OperationResult({
         const orderId = stringValue(record.orderId) || stringValue(record.amazonOrderId);
         if (orderId) onFollow("order", { orderId });
       }} actionLabel="Open order" />
+      {pageToken && environment === "production" && <PaginationResult token={pageToken} onNext={() => onFollow("orders", { orderPaginationToken: pageToken })} />}
       {orders.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
 
   if (operation === "inventory") {
-    const inventory = arrayRecords(data.inventorySummaries);
+    const payload = isRecord(data.payload) ? data.payload : data;
+    const pagination = isRecord(data.pagination) ? data.pagination : {};
+    const pageToken = stringValue(pagination.nextToken);
+    const inventory = arrayRecords(payload.inventorySummaries);
+    const rows = inventory.map((record) => {
+      const details = isRecord(record.inventoryDetails) ? record.inventoryDetails : {};
+      const reserved = isRecord(details.reservedQuantity) ? details.reservedQuantity : {};
+      return {
+        sellerSku: record.sellerSku,
+        asin: record.asin,
+        fnSku: record.fnSku,
+        condition: record.condition,
+        totalQuantity: record.totalQuantity,
+        fulfillable: details.fulfillableQuantity,
+        reserved: reserved.totalReservedQuantity,
+        inboundWorking: details.inboundWorkingQuantity,
+        inboundShipped: details.inboundShippedQuantity,
+        inboundReceiving: details.inboundReceivingQuantity,
+        unfulfillable: details.unfulfillableQuantity,
+      };
+    });
     return <div className="workflow-results">
-      <SuccessLead title={String(inventory.length) + " inventory record" + (inventory.length === 1 ? "" : "s") + " returned"} copy="Current FBA inventory summaries from Amazon." />
-      <CompactTable records={inventory} preferredKeys={["sellerSku", "asin", "fnSku", "condition", "totalQuantity"]} />
-      {inventory.length === 0 && <ResultDetails rows={genericRows} />}
+      <SuccessLead title={String(inventory.length) + " inventory record" + (inventory.length === 1 ? "" : "s") + " returned"} copy="Current FBA inventory summaries from Amazon, including the quantity fields Amazon returned." />
+      <CompactTable records={rows} preferredKeys={["sellerSku", "asin", "totalQuantity", "fulfillable", "reserved", "inboundWorking", "inboundShipped", "inboundReceiving", "unfulfillable"]} maxColumns={9} />
+      {pageToken && <PaginationResult token={pageToken} onNext={() => onFollow("inventory", { inventoryNextToken: pageToken })} />}
+      {inventory.length === 0 && <ResultDetails rows={rowsFrom(payload, ["granularity"])} />}
     </div>;
   }
 
@@ -909,7 +1178,7 @@ function OperationResult({
     const items = prep.length ? prep : arrayRecords(data.items);
     return <div className="workflow-results">
       <SuccessLead title={String(items.length) + " prep record" + (items.length === 1 ? "" : "s") + " returned"} copy="Prep instructions returned by Amazon." />
-      <CompactTable records={items} preferredKeys={["msku", "asin", "fnsku", "prepCategory", "prepTypes"]} />
+      <CompactTable records={items} preferredKeys={["msku", "prepCategory", "prepTypes", "prepOwnerConstraint", "labelOwnerConstraint", "allOwnersConstraint"]} maxColumns={6} />
       {items.length === 0 && <ResultDetails rows={genericRows} />}
     </div>;
   }
@@ -918,10 +1187,23 @@ function OperationResult({
     const order = isRecord(data.order) ? data.order : data;
     const orderId = stringValue(order.orderId) || stringFieldValue(fields, "orderId");
     const fulfillment = isRecord(order.fulfillment) ? order.fulfillment : {};
+    const salesChannel = isRecord(order.salesChannel) ? order.salesChannel : {};
+    const buyer = isRecord(order.buyer) ? order.buyer : {};
+    const recipient = isRecord(order.recipient) ? order.recipient : {};
+    const deliveryAddress = isRecord(recipient.deliveryAddress) ? recipient.deliveryAddress : {};
+    const proceeds = isRecord(order.proceeds) ? order.proceeds : {};
+    const grandTotal = isRecord(proceeds.grandTotal) ? proceeds.grandTotal : {};
     const items = arrayRecords(order.orderItems);
     return <div className="workflow-results">
       <StatusHero label="Amazon order" status={stringValue(fulfillment.fulfillmentStatus) || "RETURNED"} id={orderId} />
-      <ResultDetails rows={topLevelRows(order)} />
+      <ResultDetails rows={[
+        ...rowsFrom(order, ["createdTime", "lastUpdatedTime"]),
+        { label: "Marketplace", value: [stringValue(salesChannel.marketplaceName), stringValue(salesChannel.marketplaceId)].filter(Boolean).join(" · ") || "Not returned" },
+        { label: "Buyer", value: stringValue(buyer.buyerName) || stringValue(buyer.buyerEmail) || "Not returned / not authorized" },
+        { label: "Deliver to", value: addressSummary(deliveryAddress) || "Not returned / not authorized" },
+        { label: "Order total", value: moneySummary(grandTotal) || "Not returned" },
+        { label: "Fulfilled by", value: [stringValue(fulfillment.fulfilledBy), stringValue(fulfillment.fulfillmentServiceLevel)].filter(Boolean).join(" · ") || "Not returned" },
+      ]} />
       {items.length > 0 && <CompactTable records={items.map((item) => {
         const product = isRecord(item.product) ? item.product : {};
         return { orderItemId: item.orderItemId, quantityOrdered: item.quantityOrdered, asin: product.asin, sellerSku: product.sellerSku, title: product.title };
@@ -955,6 +1237,13 @@ function ActionRow({ children }: { children: React.ReactNode }) {
   return <div className="workflow-actions">{children}</div>;
 }
 
+function PaginationResult({ token, onNext }: { token: string; onNext: () => void }) {
+  return <div className="pagination-result">
+    <div><span>More Amazon data is available</span><code>{token}</code></div>
+    <button className="workflow-action primary" type="button" onClick={onNext}><ArrowRight size={14} /> Prepare next page</button>
+  </div>;
+}
+
 function WorkflowNote({ children }: { children: React.ReactNode }) {
   return <div className="workflow-note"><FileSearch size={16} /><p>{children}</p></div>;
 }
@@ -982,10 +1271,10 @@ function RecordList({
   })}</div>;
 }
 
-function CompactTable({ records, preferredKeys }: { records: Record<string, unknown>[]; preferredKeys: string[] }) {
+function CompactTable({ records, preferredKeys, maxColumns = 5 }: { records: Record<string, unknown>[]; preferredKeys: string[]; maxColumns?: number }) {
   if (!records.length) return null;
-  const keys = preferredKeys.filter((key) => records.some((record) => record[key] !== undefined)).slice(0, 5);
-  const columns = keys.length ? keys : Object.keys(records[0]).filter((key) => isScalar(records[0][key])).slice(0, 5);
+  const keys = preferredKeys.filter((key) => records.some((record) => record[key] !== undefined)).slice(0, maxColumns);
+  const columns = keys.length ? keys : Object.keys(records[0]).filter((key) => isScalar(records[0][key])).slice(0, maxColumns);
   return <div className="compact-table-wrap"><table className="compact-table"><thead><tr>{columns.map((key) => <th key={key}>{formatLabel(key)}</th>)}</tr></thead><tbody>{records.map((record, index) => <tr key={index}>{columns.map((key) => <td key={key}>{displayValue(record[key]) || "—"}</td>)}</tr>)}</tbody></table></div>;
 }
 
@@ -997,6 +1286,10 @@ type DocumentView = {
   bytesRead: number | null;
   truncated: boolean;
   error: string;
+  downloadType: string;
+  expiration: string;
+  compressionAlgorithm: string;
+  contentDisposition: string;
 };
 
 function DocumentResults({ documents, environment }: { documents: DocumentView[]; environment: SpApiEnvironment }) {
@@ -1005,7 +1298,15 @@ function DocumentResults({ documents, environment }: { documents: DocumentView[]
     const href = safeDocumentHref(document.url);
     return <article className="document-card" key={document.url + "-" + String(index)}>
       <div className="document-card-heading"><div><span>{"Document " + String(index + 1)}</span><strong>{document.label}</strong></div>{document.contentType && <code>{document.contentType}</code>}</div>
-      <div className="document-meta">{document.bytesRead !== null && <span>{new Intl.NumberFormat().format(document.bytesRead)} bytes read</span>}{document.truncated && <span>Preview truncated</span>}{environment === "sandbox" && !document.content && <span>Static sandbox may return a mock URL rather than a real file.</span>}</div>
+      <div className="document-meta">
+        {document.downloadType && <span>{document.downloadType}</span>}
+        {document.expiration && <span>Expires {document.expiration}</span>}
+        {document.compressionAlgorithm && <span>Compression {document.compressionAlgorithm}</span>}
+        {document.contentDisposition && <span>{document.contentDisposition}</span>}
+        {document.bytesRead !== null && <span>{new Intl.NumberFormat().format(document.bytesRead)} bytes read</span>}
+        {document.truncated && <span>Preview truncated</span>}
+        {environment === "sandbox" && !document.content && <span>Static sandbox may return a mock URL rather than a real file.</span>}
+      </div>
       {href ? <a className="workflow-action primary document-download" href={href} target="_blank" rel="noreferrer"><Download size={15} /> Open / download original <ExternalLink size={13} /></a> : <p className="document-unavailable">Amazon returned a non-HTTPS or placeholder document URL, so the workbench will not open it.</p>}
       {document.error && <p className="document-unavailable">{document.error}</p>}
       {document.content && <pre className="document-preview"><code>{document.content}</code></pre>}
@@ -1026,6 +1327,10 @@ function extractDocuments(data: Record<string, unknown>): DocumentView[] {
       bytesRead: numberValue(downloaded.bytesRead),
       truncated: downloaded.truncated === true,
       error: stringValue(downloaded.error),
+      downloadType: "",
+      expiration: "",
+      compressionAlgorithm: stringValue(data.compressionAlgorithm),
+      contentDisposition: stringValue(downloaded.contentDisposition),
     });
   }
 
@@ -1041,6 +1346,10 @@ function extractDocuments(data: Record<string, unknown>): DocumentView[] {
         bytesRead: null,
         truncated: false,
         error: "",
+        downloadType: stringValue(document.downloadType),
+        expiration: stringValue(document.expiration),
+        compressionAlgorithm: "",
+        contentDisposition: "",
       });
     });
   }
@@ -1056,6 +1365,10 @@ function extractDocuments(data: Record<string, unknown>): DocumentView[] {
       bytesRead: null,
       truncated: false,
       error: "",
+      downloadType: "URL",
+      expiration: "",
+      compressionAlgorithm: "",
+      contentDisposition: "",
     });
   }
   return output;
@@ -1098,6 +1411,39 @@ function displayValue(value: unknown): string {
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   if (Array.isArray(value) && value.every((item) => ["string", "number", "boolean"].includes(typeof item))) return value.join(", ");
   return "";
+}
+
+
+type ResponseWarning = { code: string; message: string; details: string };
+
+function extractResponseWarnings(value: unknown): ResponseWarning[] {
+  if (!isRecord(value)) return [];
+  const candidates: unknown[] = [];
+  if (Array.isArray(value.businessWarnings)) candidates.push(...value.businessWarnings);
+  if (Array.isArray(value.errors)) candidates.push(...value.errors);
+  return candidates.filter(isRecord).map((warning, index) => ({
+    code: stringValue(warning.code) || stringValue(warning.severity) || "AMAZON_WARNING_" + String(index + 1),
+    message: stringValue(warning.message) || "Amazon returned an additional warning.",
+    details: stringValue(warning.details),
+  }));
+}
+
+function addressSummary(value: Record<string, unknown>) {
+  return [
+    stringValue(value.name),
+    stringValue(value.addressLine1),
+    stringValue(value.addressLine2),
+    stringValue(value.city),
+    stringValue(value.stateOrProvinceCode) || stringValue(value.stateOrRegion),
+    stringValue(value.postalCode),
+    stringValue(value.countryCode),
+  ].filter(Boolean).join(", ");
+}
+
+function moneySummary(value: Record<string, unknown>) {
+  const amount = stringValue(value.amount) || (typeof value.amount === "number" ? String(value.amount) : "");
+  const currency = stringValue(value.currencyCode) || stringValue(value.CurrencyCode);
+  return [currency, amount].filter(Boolean).join(" ");
 }
 
 function stringFieldValue(fields: Record<string, FieldValue>, key: string) {

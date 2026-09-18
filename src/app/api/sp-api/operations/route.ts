@@ -375,7 +375,7 @@ export async function POST(request: Request) {
         addOptional(params, "NumberOfPallets", numberOfPallets);
         addOptional(params, "PageSize", optionalIntegerField(fields, "shipmentPageSize", 1));
         addOptional(params, "PageStartIndex", optionalIntegerField(fields, "pageStartIndex", 0));
-        addRepeatedCsv(params, "PackageLabelsToPrint", optionalString(fields, "packageLabelsToPrint"), 1000);
+        addCsv(params, "PackageLabelsToPrint", optionalString(fields, "packageLabelsToPrint"), 1000);
         result = await call(input, "/fba/inbound/v0/shipments/" + encodeURIComponent(shipmentId) + "/labels?" + params);
         break;
       }
@@ -902,13 +902,6 @@ function addCsv(params: URLSearchParams, key: string, value: string, max: number
   if (values.length > max) throw new SpApiError(key + " accepts at most " + max + " values", 400, null, "TOO_MANY_VALUES");
   if (repeated) values.forEach((entry) => params.append(key, entry));
   else params.set(key, values.join(","));
-}
-
-function addRepeatedCsv(params: URLSearchParams, key: string, value: string, max: number) {
-  if (!value) return;
-  const values = value.split(/[\n,]/).map((entry) => entry.trim()).filter(Boolean);
-  if (values.length > max) throw new SpApiError(key + " accepts at most " + max + " values", 400, null, "TOO_MANY_VALUES");
-  values.forEach((entry) => params.append(key, entry));
 }
 
 function addPrepMskus(params: URLSearchParams, value: string, max: number) {
