@@ -515,7 +515,20 @@ export function Workbench() {
             <span className="region-label">{environment.toUpperCase()} · {marketplace.name} / {marketplace.region.toUpperCase()}</span>
           </div>
 
-          <OperationPicker active={operation} onChange={(next) => { setOperation(next); setResult(null); setFields((current) => ({ ...current, confirmed: false })); }} />
+          <OperationPicker active={operation} onChange={(next) => {
+            setOperation(next);
+            setResult(null);
+            setFields((current) => ({
+              ...current,
+              confirmed: false,
+              inventoryNextToken: "",
+              orderPaginationToken: "",
+              reportNextToken: "",
+              feedNextToken: "",
+              inboundPaginationToken: "",
+            }));
+            setCatalog((current) => ({ ...current, pageToken: "" }));
+          }} />
 
           <form className="request-form" onSubmit={runRequest}>
             <div className="request-intro">
@@ -654,16 +667,16 @@ function OperationFields({
   currency: string;
 }) {
   if (operation === "catalog") return <div className="operation-fields">
-    <Choice label="Search mode" required options={["identifier", "keywords"]} value={catalog.mode} onChange={(value) => setCatalog((current) => ({ ...current, mode: value as "identifier" | "keywords" }))} />
+    <Choice label="Search mode" required options={["identifier", "keywords"]} value={catalog.mode} onChange={(value) => setCatalog((current) => ({ ...current, mode: value as "identifier" | "keywords", pageToken: "" }))} />
     {environment === "sandbox" ? <div className="dataset-note"><Check size={15} /><span>{catalog.mode === "keywords" ? <>Static Sandbox automatically uses Amazon&apos;s <strong>samsung + tv</strong> keyword example.</> : <>Static Sandbox automatically uses Amazon&apos;s US product example <strong>B07N4M94X4</strong>.</>}</span></div> : <>
-      {catalog.mode === "identifier" && <Choice label="Identifier type" required options={["ASIN", "UPC", "EAN", "GTIN", "ISBN", "SKU", "JAN", "MINSAN"]} value={catalog.identifierType} onChange={(value) => setCatalog((current) => ({ ...current, identifierType: value }))} />}
-      <Field label={catalog.mode === "keywords" ? "Search terms" : "Product identifier(s)"} required><input required placeholder={catalog.mode === "keywords" ? "wireless barcode scanner" : "One value, or up to 20 separated by commas"} value={catalog.query} onChange={(event) => setCatalog((current) => ({ ...current, query: event.target.value }))} /></Field>
+      {catalog.mode === "identifier" && <Choice label="Identifier type" required options={["ASIN", "UPC", "EAN", "GTIN", "ISBN", "SKU", "JAN", "MINSAN"]} value={catalog.identifierType} onChange={(value) => setCatalog((current) => ({ ...current, identifierType: value, pageToken: "" }))} />}
+      <Field label={catalog.mode === "keywords" ? "Search terms" : "Product identifier(s)"} required><input required placeholder={catalog.mode === "keywords" ? "wireless barcode scanner" : "One value, or up to 20 separated by commas"} value={catalog.query} onChange={(event) => setCatalog((current) => ({ ...current, query: event.target.value, pageToken: "" }))} /></Field>
       {catalog.identifierType === "SKU" && catalog.mode === "identifier" && <Field label="Seller ID" required requirement="Required for SKU"><input required placeholder="A1XXXXXXXXXXXX" value={catalog.sellerId} onChange={(event) => setCatalog((current) => ({ ...current, sellerId: event.target.value }))} /></Field>}
       {catalog.mode === "identifier" && catalog.identifierType === "ASIN" && <CheckField label="Fetch every related variation and package ASIN for one ASIN" checked={catalog.includeVariations} onChange={(checked) => setCatalog((current) => ({ ...current, includeVariations: checked }))} />}
       {catalog.mode === "keywords" && <>
-        <Field label="Brand names"><input placeholder="Optional · Samsung, Apple" value={catalog.brandNames} onChange={(event) => setCatalog((current) => ({ ...current, brandNames: event.target.value }))} /></Field>
-        <Field label="Classification IDs"><input placeholder="Optional · comma-separated" value={catalog.classificationIds} onChange={(event) => setCatalog((current) => ({ ...current, classificationIds: event.target.value }))} /></Field>
-        <Field label="Results per page"><input max="20" min="1" type="number" value={catalog.pageSize} onChange={(event) => setCatalog((current) => ({ ...current, pageSize: event.target.value }))} /></Field>
+        <Field label="Brand names"><input placeholder="Optional · Samsung, Apple" value={catalog.brandNames} onChange={(event) => setCatalog((current) => ({ ...current, brandNames: event.target.value, pageToken: "" }))} /></Field>
+        <Field label="Classification IDs"><input placeholder="Optional · comma-separated" value={catalog.classificationIds} onChange={(event) => setCatalog((current) => ({ ...current, classificationIds: event.target.value, pageToken: "" }))} /></Field>
+        <Field label="Results per page"><input max="20" min="1" type="number" value={catalog.pageSize} onChange={(event) => setCatalog((current) => ({ ...current, pageSize: event.target.value, pageToken: "" }))} /></Field>
         <Field label="Next-page token"><input placeholder="From the previous response" value={catalog.pageToken} onChange={(event) => setCatalog((current) => ({ ...current, pageToken: event.target.value }))} /></Field>
       </>}
       <div className="dataset-note"><Check size={15} /><span>Requests attributes, classifications, dimensions, identifiers, images, product types, relationships, sales ranks, summaries, and vendor details.</span></div>
