@@ -256,6 +256,62 @@ h2 { margin: 0; font-size: 15px; font-weight: 680; letter-spacing: -.01em; }
 .fee-line { justify-content: space-between; gap: 18px; padding: 10px 0; border-bottom: 1px solid var(--line-soft); font-size: 11px; }
 .fee-line span { color: var(--muted); }
 
+
+.workflow-results { margin-top: 18px; }
+.workflow-results .success-summary { margin-top: 0; }
+.status-hero { margin-top: 18px; padding: 18px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 14px; border: 1px solid var(--line); border-radius: 9px; background: white; }
+.status-hero > div span, .document-card-heading span { display: block; color: var(--subtle); font-size: 9px; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; }
+.status-hero > div strong { display: block; margin-top: 4px; color: #344054; font-size: 20px; letter-spacing: -.03em; }
+.status-hero code, .document-card-heading code, .record-list code { color: #475467; font-family: var(--font-geist-mono), monospace; font-size: 9px; overflow-wrap: anywhere; }
+.status-pill { padding: 5px 8px; border-radius: 999px; font-size: 9px; font-weight: 800; letter-spacing: .06em; }
+.status-pill.good { color: #067647; background: #ecfdf3; border: 1px solid #abefc6; }
+.status-pill.pending { color: #b54708; background: #fffaeb; border: 1px solid #fedf89; }
+.status-pill.bad { color: #b42318; background: #fef3f2; border: 1px solid #fecdca; }
+
+.workflow-details { margin: 12px 0 0; border: 1px solid var(--line); border-radius: 8px; background: white; overflow: hidden; }
+.workflow-details > div { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 18px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); }
+.workflow-details > div:last-child { border-bottom: 0; }
+.workflow-details dt { color: var(--muted); font-size: 10px; }
+.workflow-details dd { margin: 0; color: #344054; font-family: var(--font-geist-mono), monospace; font-size: 10px; overflow-wrap: anywhere; }
+
+.workflow-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.workflow-action { min-height: 36px; padding: 0 11px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #a9b5c5; border-radius: 7px; background: white; color: #344054; font-size: 10px; font-weight: 720; text-decoration: none; cursor: pointer; }
+.workflow-action:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.workflow-action.primary { border-color: var(--accent); background: var(--accent); color: white; }
+.workflow-action.primary:hover { background: var(--accent-strong); color: white; }
+
+.workflow-note, .sandbox-flow-note { margin-top: 12px; padding: 12px 13px; display: flex; align-items: flex-start; gap: 9px; border-radius: 8px; font-size: 10px; line-height: 1.5; }
+.workflow-note { color: #45628f; border: 1px solid #cfe0ff; background: var(--accent-soft); }
+.sandbox-flow-note { color: #7a5b13; border: 1px solid #fedf89; background: #fffaeb; }
+.workflow-note svg, .sandbox-flow-note svg { flex: 0 0 auto; margin-top: 1px; }
+.workflow-note p, .sandbox-flow-note p { margin: 0; }
+.sandbox-flow-note code { font-family: var(--font-geist-mono), monospace; font-size: 9px; }
+
+.record-list { display: grid; gap: 8px; margin-top: 12px; }
+.record-list article { min-width: 0; padding: 12px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid var(--line); border-radius: 8px; background: white; }
+.record-list article > div { min-width: 0; }
+.record-list small, .record-list strong, .record-list code { display: block; }
+.record-list small { margin-bottom: 3px; color: var(--subtle); font-size: 9px; text-transform: uppercase; letter-spacing: .07em; }
+.record-list strong { color: #344054; font-size: 11px; overflow-wrap: anywhere; }
+.record-list code { margin-top: 4px; }
+
+.compact-table-wrap { margin-top: 12px; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: white; }
+.compact-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+.compact-table th, .compact-table td { padding: 9px 11px; border-bottom: 1px solid var(--line-soft); text-align: left; white-space: nowrap; }
+.compact-table th { color: var(--muted); background: #f8fafc; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
+.compact-table td { color: #344054; }
+.compact-table tbody tr:last-child td { border-bottom: 0; }
+
+.document-results { display: grid; gap: 12px; margin-top: 12px; }
+.document-card { padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: white; }
+.document-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.document-card-heading strong { display: block; margin-top: 4px; color: #344054; font-size: 12px; overflow-wrap: anywhere; }
+.document-meta { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0; color: var(--subtle); font-size: 9px; }
+.document-meta span { padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; background: #f8fafc; }
+.document-download { width: fit-content; margin-top: 4px; }
+.document-unavailable { margin: 10px 0 0; color: #b54708; font-size: 10px; line-height: 1.5; }
+.document-preview { max-height: 420px; margin: 12px 0 0; padding: 14px; overflow: auto; border: 1px solid var(--line-soft); border-radius: 7px; background: #f8fafc; color: #344054; font-family: var(--font-geist-mono), monospace; font-size: 9px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+
 .inspector-heading { flex: 0 0 auto; }
 .inspector-meta { justify-content: space-between; gap: 12px; margin-top: 16px; padding: 9px 0; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); color: var(--subtle); font-family: var(--font-geist-mono), monospace; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
 .json-viewer { min-height: 260px; max-height: 520px; margin: 0; padding: 16px; overflow: auto; border-radius: 0 0 8px 8px; background: #f8fafc; color: #344054; font-family: var(--font-geist-mono), monospace; font-size: 10px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
@@ -295,6 +351,10 @@ h2 { margin: 0; font-size: 15px; font-weight: 680; letter-spacing: -.01em; }
   .measurement-columns { grid-template-columns: 1fr; }
   .detail-table > div { grid-template-columns: minmax(110px, .75fr) minmax(0, 1.25fr); gap: 12px; }
   .fee-result { grid-template-columns: 1fr; }
+  .status-hero { grid-template-columns: 1fr; align-items: flex-start; }
+  .workflow-details > div { grid-template-columns: 1fr; gap: 4px; }
+  .record-list article { align-items: flex-start; flex-direction: column; }
+  .document-card-heading { flex-direction: column; }
   .fee-total { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 24px; }
 }
 
