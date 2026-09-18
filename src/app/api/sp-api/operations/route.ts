@@ -67,6 +67,15 @@ export async function POST(request: Request) {
       }
 
       case "reports": {
+        if (input.environment === "sandbox") {
+          const params = new URLSearchParams({
+            reportTypes: "FEE_DISCOUNTS_REPORT,GET_AFN_INVENTORY_DATA",
+            processingStatuses: "IN_QUEUE,IN_PROGRESS",
+          });
+          result = await call(input, "/reports/2021-06-30/reports?" + params);
+          break;
+        }
+
         const nextToken = optionalString(fields, "reportNextToken");
         const params = nextToken
           ? new URLSearchParams({ nextToken })
@@ -87,6 +96,16 @@ export async function POST(request: Request) {
 
       case "createReport": {
         requireConfirmation(fields);
+
+        if (input.environment === "sandbox") {
+          result = await call(input, "/reports/2021-06-30/reports", "POST", {
+            reportType: "GET_MERCHANT_LISTINGS_ALL_DATA",
+            dataStartTime: "2024-03-10T20:11:24.000Z",
+            marketplaceIds: ["A1PA6795UKMFR9", "ATVPDKIKX0DER"],
+          });
+          break;
+        }
+
         const range = optionalDateRange(fields);
         validateOptionalRange(range.dataStartTime, range.dataEndTime, "dataStartTime", "dataEndTime");
         result = await call(input, "/reports/2021-06-30/reports", "POST", {
@@ -101,13 +120,16 @@ export async function POST(request: Request) {
         result = await call(input, "/reports/2021-06-30/reports/" + encodeURIComponent(stringField(fields, "reportId")));
         break;
 
-      case "reportDocument":
+      case "reportDocument": {
+        const reportDocumentId = stringField(fields, "reportDocumentId");
+        const suffix = input.environment === "sandbox" ? "" : "?enableContentEncodingUrlHeader=true";
         result = await getAndDownloadDocument(
           input,
-          "/reports/2021-06-30/documents/" + encodeURIComponent(stringField(fields, "reportDocumentId")) + "?enableContentEncodingUrlHeader=true",
+          "/reports/2021-06-30/documents/" + encodeURIComponent(reportDocumentId) + suffix,
           "report document",
         );
         break;
+      }
 
       case "feeds": {
         const nextToken = optionalString(fields, "feedNextToken");
