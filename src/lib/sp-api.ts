@@ -162,6 +162,20 @@ export function toErrorResponse(error: unknown) {
     );
   }
 
+  if (error instanceof SyntaxError) {
+    const problem: SpApiProblem = {
+      code: "INVALID_JSON",
+      message: "The request body is not valid JSON.",
+      details: error.message,
+      action: "Correct the JSON syntax and submit the request again.",
+      retryable: false,
+    };
+    return Response.json(
+      { ok: false, error: problem.message, problem },
+      { status: 400, headers: privateHeaders },
+    );
+  }
+
   if (error instanceof SpApiError) {
     const problem = buildProblem({
       status: error.status,
@@ -362,7 +376,10 @@ function recommendedAction(code: string, status: number, message: string, retrya
   if (status === 401 || status === 403 || key.includes("unauthorized") || key.includes("accessdenied") || key.includes("access denied")) {
     return "Verify the seller authorized this app and that the app has the Amazon role required by this operation/report. Reauthorize after changing roles.";
   }
-  if (status === 429 || key.includes("throttl") || key.includes("quota")) {
+  if (key.includes("could not match input arguments") || key.includes("sandbox request")) {
+    return "Amazon's static sandbox only accepts predefined request examples. Use the exact sandbox marketplace, IDs, parameters, and included-data values documented for this operation. Do not use arbitrary production IDs in static Sandbox mode.";
+  }
+    if (status === 429 || key.includes("throttl") || key.includes("quota")) {
     return "Slow the request rate and honor Retry-After / x-amzn-RateLimit-Limit. Retry the same request after the throttle window.";
   }
   if (status === 400 || key.includes("badrequest") || key.includes("invalidinput") || key.includes("invalid input")) {
