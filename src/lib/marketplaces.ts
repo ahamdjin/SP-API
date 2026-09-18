@@ -34,6 +34,7 @@ export const marketplaces: Marketplace[] = [
   { id: "A19VAU5U5O7RUS", name: "Singapore", region: "fe", currency: "SGD", locale: "en_SG" },
 ];
 
+// Regional Amazon hosts used by the shared SP-API transport for Production and Sandbox.
 export const endpoints = {
   production: {
     na: "https://sellingpartnerapi-na.amazon.com",
@@ -51,6 +52,7 @@ export function getMarketplace(id: string) {
   return marketplaces.find((marketplace) => marketplace.id === id);
 }
 
+// Resolves the exact Amazon host for the selected marketplace region/environment.
 export function getEndpoint(region: Marketplace["region"], environment: SpApiEnvironment = "production") {
   return endpoints[environment][region];
 }
