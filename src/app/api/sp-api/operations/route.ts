@@ -349,33 +349,62 @@ async function getAndDownloadDocument(input: Input, path: string, label: string)
   }
 
   const downloadUrl = safeAmazonDocumentUrl(url, label);
-  const download = await fetch(downloadUrl, {
-    method: "GET",
-    cache: "no-store",
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!download.ok) {
-    throw new SpApiError(
-      `Downloading the ${label} failed with HTTP ${download.status}`,
-      download.status,
-      { statusText: download.statusText },
-      "DOCUMENT_DOWNLOAD_FAILED",
-    );
-  }
 
-  const preview = await readTextPreview(download, documentPreviewLimit);
-  return {
-    ...metadata,
-    data: {
-      ...document,
-      downloaded: {
-        contentType: download.headers.get("content-type"),
-        bytesRead: preview.bytesRead,
-        truncated: preview.truncated,
-        content: preview.text,
+  try {
+    const download = await fetch(downloadUrl, {
+      method: "GET",
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!download.ok) {
+      return {
+        ...metadata,
+        data: {
+          ...document,
+          downloaded: {
+            contentType: null,
+            bytesRead: 0,
+            truncated: false,
+            content: "",
+            error: `Server-side preview failed with HTTP ${download.status} ${download.statusText}. The original Amazon URL is still available below.`,
+          },
+        },
+      };
+    }
+
+    const preview = await readTextPreview(download, documentPreviewLimit);
+    return {
+      ...metadata,
+      data: {
+        ...document,
+        downloaded: {
+          contentType: download.headers.get("content-type"),
+          contentDisposition: download.headers.get("content-disposition"),
+          bytesRead: preview.bytesRead,
+          truncated: preview.truncated,
+          content: preview.text,
+          error: null,
+        },
       },
-    },
-  };
+    };
+  } catch (error) {
+    return {
+      ...metadata,
+      data: {
+        ...document,
+        downloaded: {
+          contentType: null,
+          bytesRead: 0,
+          truncated: false,
+          content: "",
+          error: error instanceof Error
+            ? "Server-side preview failed: " + error.message + ". The original Amazon URL is still available below."
+            : "Server-side preview failed. The original Amazon URL is still available below.",
+        },
+      },
+    };
+  }
 }
 
 async function readTextPreview(response: Response, maxBytes: number) {
@@ -475,6 +504,7 @@ function applyBusinessOutcome(operation: Input["operation"], result: CallResult)
       return {
         ...result,
         ok: false,
+        status: 422,
         statusText: "Feed processing " + processingStatus.toLowerCase(),
         problem: {
           code: "FEED_" + processingStatus,
@@ -516,6 +546,7 @@ function applyBusinessOutcome(operation: Input["operation"], result: CallResult)
       return {
         ...result,
         ok: false,
+        status: 422,
         statusText: "Report processing " + processingStatus.toLowerCase(),
         problem: {
           code: "REPORT_" + processingStatus,
@@ -561,6 +592,7 @@ function applyBusinessOutcome(operation: Input["operation"], result: CallResult)
       return {
         ...result,
         ok: false,
+        status: 422,
         statusText: "Inbound operation failed",
         problem: {
           code,
@@ -607,6 +639,36 @@ function applyBusinessOutcome(operation: Input["operation"], result: CallResult)
       data: {
         ...data,
         nextStep: "Poll Report status with reportId until DONE, FATAL, or CANCELLED. Download the report only after DONE.",
+      },
+    };
+  }
+
+  if (operation === "submitFeed" && typeof data.feedId === "string") {
+    return {
+      ...result,
+      data: {
+        ...data,
+        nextStep: "Poll Feed status with feedId until DONE, FATAL, or CANCELLED. When DONE, open resultFeedDocumentId to verify record-level processing.",
+      },
+    };
+  }
+
+  if (operation === "itemLabels") {
+    return {
+      ...result,
+      data: {
+        ...data,
+        nextStep: "Use the returned documentDownloads URL to open or download the generated item-label file before it expires.",
+      },
+    };
+  }
+
+  if (operation === "shipmentLabels" || operation === "billOfLading") {
+    return {
+      ...result,
+      data: {
+        ...data,
+        nextStep: "Use Amazon's returned DownloadURL to open or download the generated document before the URL expires.",
       },
     };
   }
