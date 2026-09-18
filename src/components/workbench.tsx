@@ -381,6 +381,7 @@ export function Workbench() {
     setFields((current) => ({ ...current, [key]: value }));
   }
 
+  // Carries returned IDs/tokens into the next workflow step so the operator does not copy them manually.
   function followOperation(nextOperation: Operation, patch: Record<string, FieldValue> = {}) {
     setFields((current) => ({ ...current, ...patch, confirmed: false }));
     setOperation(nextOperation);
@@ -395,6 +396,7 @@ export function Workbench() {
     window.setTimeout(() => document.querySelector(".request-form")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   }
 
+  // Calls the server-side connection test without exposing Amazon credentials in the response.
   async function testConnection() {
     setConnectionState("testing");
     setConnectionMessage("Requesting token…");
@@ -412,6 +414,7 @@ export function Workbench() {
     }
   }
 
+  // Main UI submit handler: chooses the internal API route and sends the visible form values.
   async function runRequest(event: FormEvent) {
     event.preventDefault();
     if (activeItem.kind === "legacy") return;
@@ -1445,6 +1448,7 @@ function stringFieldValue(fields: Record<string, FieldValue>, key: string) {
   return typeof fields[key] === "string" ? fields[key] as string : "";
 }
 
+// Browser-to-Next.js HTTP helper. Amazon calls themselves happen only in the server-side API routes.
 async function postJson(url: string, payload: unknown): Promise<ApiResult> {
   const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
   const data = await response.json() as ApiResult;
