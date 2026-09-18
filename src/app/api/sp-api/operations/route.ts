@@ -1,5 +1,5 @@
 import { getMarketplace } from "@/lib/marketplaces";
-import { parseCsvFields, preserveIsoInstant } from "@/lib/request-parsing";
+import { parseCsvFields, preserveIsoDate, preserveIsoInstant } from "@/lib/request-parsing";
 import { operationRequestSchema } from "@/lib/schemas";
 import { callSpApi, privateHeaders, SpApiError, toErrorResponse } from "@/lib/sp-api";
 
@@ -198,24 +198,32 @@ export async function POST(request: Request) {
       case "createInboundPlan": {
         requireConfirmation(fields);
         const marketplace = getMarketplace(input.marketplaceId);
-        const destinationMarketplaces = csvValues(optionalString(fields, "destinationMarketplaces"), 10);
+        const destinationMarketplaces = csvValues(optionalString(fields, "destinationMarketplaces"), 1);
+        const countryCode = (optionalString(fields, "countryCode") || marketplace?.locale.slice(-2) || "US").toUpperCase();
+        if (!/^[A-Z]{2}$/.test(countryCode)) {
+          throw new SpApiError("countryCode must be a two-letter ISO country code", 400, { countryCode }, "INVALID_COUNTRY_CODE");
+        }
+
+        const items = parseItems(stringField(fields, "items"), 2000, 500000);
+        validateInboundItems(items, input.marketplaceId);
+
         result = await call(input, "/inbound/fba/2024-03-20/inboundPlans", "POST", {
           destinationMarketplaces: destinationMarketplaces.length ? destinationMarketplaces : [input.marketplaceId],
-          name: optionalString(fields, "planName") || undefined,
+          name: optionalLimitedStringField(fields, "planName", 40) || undefined,
           sourceAddress: {
-            name: stringField(fields, "contactName"),
-            companyName: optionalString(fields, "companyName") || undefined,
-            addressLine1: stringField(fields, "addressLine1"),
-            addressLine2: optionalString(fields, "addressLine2") || undefined,
-            city: stringField(fields, "city"),
-            districtOrCounty: optionalString(fields, "districtOrCounty") || undefined,
-            stateOrProvinceCode: optionalString(fields, "stateOrProvinceCode") || undefined,
-            postalCode: stringField(fields, "postalCode"),
-            countryCode: (optionalString(fields, "countryCode") || marketplace?.locale.slice(-2) || "US").toUpperCase(),
-            phoneNumber: stringField(fields, "phoneNumber"),
-            email: optionalString(fields, "email") || undefined,
+            name: limitedStringField(fields, "contactName", 50),
+            companyName: optionalLimitedStringField(fields, "companyName", 50) || undefined,
+            addressLine1: limitedStringField(fields, "addressLine1", 180),
+            addressLine2: optionalLimitedStringField(fields, "addressLine2", 60) || undefined,
+            city: limitedStringField(fields, "city", 30),
+            districtOrCounty: optionalLimitedStringField(fields, "districtOrCounty", 50) || undefined,
+            stateOrProvinceCode: optionalLimitedStringField(fields, "stateOrProvinceCode", 64) || undefined,
+            postalCode: limitedStringField(fields, "postalCode", 32),
+            countryCode,
+            phoneNumber: limitedStringField(fields, "phoneNumber", 20),
+            email: optionalLimitedStringField(fields, "email", 1024) || undefined,
           },
-          items: parseItems(stringField(fields, "items"), 2000),
+          items,
         });
         break;
       }
@@ -227,11 +235,11 @@ export async function POST(request: Request) {
           marketplaceId: input.marketplaceId,
           labelType,
           localeCode: marketplace?.locale || "en_US",
-          mskuQuantities: parseItems(stringField(fields, "items"), 100).map(({ msku, quantity }) => ({ msku, quantity })),
+          mskuQuantities: parseItems(stringField(fields, "items"), 100, 10000).map(({ msku, quantity }) => ({ msku, quantity })),
         };
         if (labelType === "THERMAL_PRINTING") {
-          body.height = numberField(fields, "labelHeight", 1, 1000, 25);
-          body.width = numberField(fields, "labelWidth", 1, 1000, 100);
+          body.height = numberField(fields, "labelHeight", 25, 100, 25);
+          body.width = numberField(fields, "labelWidth", 25, 100, 100);
         } else {
           body.pageType = optionalString(fields, "pageType") || "A4_21";
         }
@@ -704,6 +712,22 @@ function optionalString(fields: Fields, key: string) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function limitedStringField(fields: Fields, key: string, maxLength: number) {
+  const value = stringField(fields, key);
+  if (value.length > maxLength) {
+    throw new SpApiError(key + " must be at most " + maxLength + " characters", 400, { length: value.length }, "VALUE_TOO_LONG");
+  }
+  return value;
+}
+
+function optionalLimitedStringField(fields: Fields, key: string, maxLength: number) {
+  const value = optionalString(fields, key);
+  if (value.length > maxLength) {
+    throw new SpApiError(key + " must be at most " + maxLength + " characters", 400, { length: value.length }, "VALUE_TOO_LONG");
+  }
+  return value;
+}
+
 function booleanField(fields: Fields, key: string) {
   return fields[key] === true || fields[key] === "true";
 }
@@ -806,7 +830,7 @@ function requireConfirmation(fields: Fields) {
   }
 }
 
-function parseItems(value: string, max = 2000) {
+function parseItems(value: string, max = 2000, maxQuantity = 500000) {
   const items = value.split(/\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
     let fields: string[];
     try {
@@ -831,8 +855,13 @@ function parseItems(value: string, max = 2000) {
     }
 
     const quantity = Number(quantityRaw);
-    if (!msku || !Number.isInteger(quantity) || quantity < 1 || quantity > 500000) {
-      throw new SpApiError("Each item must use: MSKU, quantity, prep owner, label owner[, expiration, manufacturing lot code]", 400, { line }, "INVALID_ITEM_ROW");
+    if (!msku || msku.length > 255 || !Number.isInteger(quantity) || quantity < 1 || quantity > maxQuantity) {
+      throw new SpApiError(
+        "Each item needs an MSKU up to 255 characters and an integer quantity between 1 and " + maxQuantity,
+        400,
+        { line, mskuLength: msku.length, quantity },
+        "INVALID_ITEM_ROW",
+      );
     }
     if (!["AMAZON", "SELLER", "NONE"].includes(prepOwner)) {
       throw new SpApiError("Prep owner must be AMAZON, SELLER, or NONE", 400, { line, prepOwner }, "INVALID_PREP_OWNER");
@@ -840,12 +869,20 @@ function parseItems(value: string, max = 2000) {
     if (!["AMAZON", "SELLER", "NONE"].includes(labelOwner)) {
       throw new SpApiError("Label owner must be AMAZON, SELLER, or NONE", 400, { line, labelOwner }, "INVALID_LABEL_OWNER");
     }
+    const validExpiration = expiration ? preserveIsoDate(expiration) : null;
+    if (expiration && !validExpiration) {
+      throw new SpApiError("Expiration must use a real YYYY-MM-DD date", 400, { line, expiration }, "INVALID_EXPIRATION_DATE");
+    }
+    if (manufacturingLotCode.length > 256) {
+      throw new SpApiError("Manufacturing lot code must be at most 256 characters", 400, { line }, "LOT_CODE_TOO_LONG");
+    }
+
     return {
       msku,
       quantity,
       prepOwner,
       labelOwner,
-      ...(expiration ? { expiration } : {}),
+      ...(validExpiration ? { expiration: validExpiration } : {}),
       ...(manufacturingLotCode ? { manufacturingLotCode } : {}),
     };
   });
@@ -854,6 +891,20 @@ function parseItems(value: string, max = 2000) {
   return items;
 }
 
+
+function validateInboundItems(items: ReturnType<typeof parseItems>, marketplaceId: string) {
+  if (marketplaceId === "ATVPDKIKX0DER") {
+    const invalid = items.find((item) => item.labelOwner === "AMAZON");
+    if (invalid) {
+      throw new SpApiError(
+        "Amazon does not accept labelOwner=AMAZON for US inbound-plan items. Use SELLER or NONE as allowed by the prep-details response.",
+        400,
+        { msku: invalid.msku, marketplaceId },
+        "INVALID_US_LABEL_OWNER",
+      );
+    }
+  }
+}
 
 function validateJsonListingsFeed(contentType: string, content: string) {
   if (!/^application\/json\b/i.test(contentType.trim())) {
