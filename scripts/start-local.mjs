@@ -8,7 +8,22 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const lockPath = resolve(root, "package-lock.json");
 const nextPath = resolve(root, "node_modules", "next", "package.json");
 const stampPath = resolve(root, "node_modules", ".sp-api-lock-hash");
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+const isWindows = process.platform === "win32";
+
+// Windows npm is a .cmd shim, so launch it through cmd.exe instead of spawning npm.cmd directly.
+function getNpmProcess(args) {
+  if (isWindows) {
+    return {
+      command: process.env.ComSpec || "cmd.exe",
+      args: ["/d", "/s", "/c", ["npm", ...args].join(" ")],
+    };
+  }
+
+  return {
+    command: "npm",
+    args,
+  };
+}
 
 const lockHash = createHash("sha256")
   .update(readFileSync(lockPath))
@@ -20,7 +35,8 @@ const installedHash = existsSync(stampPath)
 
 if (!existsSync(nextPath) || installedHash !== lockHash) {
   console.log("[SP-API] Installing npm dependencies for this repo...");
-  const install = spawnSync(npm, ["ci"], {
+  const npmCi = getNpmProcess(["ci"]);
+  const install = spawnSync(npmCi.command, npmCi.args, {
     cwd: root,
     stdio: "inherit",
   });
@@ -40,7 +56,8 @@ if (!existsSync(nextPath) || installedHash !== lockHash) {
 }
 
 console.log("[SP-API] Starting Next.js...");
-const app = spawn(npm, ["run", "dev"], {
+const npmDev = getNpmProcess(["run", "dev"]);
+const app = spawn(npmDev.command, npmDev.args, {
   cwd: root,
   stdio: "inherit",
 });
