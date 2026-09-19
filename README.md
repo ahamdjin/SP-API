@@ -60,34 +60,45 @@ The old buttons are represented as follows:
 | GetLabels | Shipment labels / Item labels / Bill of lading |
 | Convert / FC bulk update | Shown as legacy database integrations |
 
-## Visual Studio one-click run
+## Install and run
 
-The repository includes `SP-API.sln`, `SP-API.esproj`, and a Visual Studio launch profile so a Windows user can open the solution and start the app with the green **Run / F5** button.
+### Visual Studio (recommended on Windows)
 
-Requirements:
+You need:
 
 - Visual Studio 2022 or newer with the **Node.js development** workload.
 - Node.js 24+ and npm.
 
-Use it like this:
+Then:
 
-1. Double-click `SP-API.sln`.
-2. Press the green **Run / F5** button.
-3. On the first run (or after `package-lock.json` changes), the startup launcher automatically runs `npm ci`.
-4. Once dependencies are ready, Visual Studio starts the Next.js development server and opens the configured browser at `http://localhost:3000`.
+1. Download or clone this repository.
+2. If you downloaded a ZIP, extract it first.
+3. Open `SP-API.sln` in Visual Studio.
+4. Press the green **Run / F5** button.
+5. On the first run, wait while npm packages are installed automatically.
+6. The app will start at `http://localhost:3000`.
 
-No manual `npm install` is required for the Visual Studio workflow. Later runs skip dependency installation while the lockfile is unchanged. Production verification is still done with `npm run build` and `npm start`.
+After the first successful run, later starts should be much faster.
 
-## Run locally
+### Run from a terminal
 
-Requirements: Node.js 24+ and npm.
+Open a terminal in the project folder and run:
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Changes update automatically while the development server is running.
+Then open `http://localhost:3000`.
+
+### If something does not work
+
+- **`npm` is not recognized:** install Node.js 24+ and reopen Visual Studio or the terminal.
+- **`next` is not recognized:** run `npm ci` in the project folder, then run again.
+- **First run looks stuck:** npm may still be downloading packages. Give it a few minutes. If there is still no progress, stop the run, check your internet connection, run `npm ci`, then try again.
+- **Dependencies look broken:** close the app, delete the `node_modules` folder, run `npm ci`, and start again.
+- **Port 3000 is already in use:** close the other local Next.js/Node app using that port, then start this project again.
+- **Hydration warning mentions a browser-extension attribute:** disable that extension for `localhost` or test in a private/incognito window. The app also suppresses harmless root-level extension attribute mismatches.
 
 ## Verify a production build
 
