@@ -76,7 +76,15 @@ try {
     throw new Error(`Timed out waiting for ${url}.\n${output.join("")}`);
   }
 
-  console.log(`[SP-API] Windows-style startup health check passed at ${url}.`);
+  const combinedOutput = output.join("");
+  if (process.env.SP_API_EXPECT_INSTALL === "1" && !combinedOutput.includes("[SP-API] Dependencies installed successfully.")) {
+    throw new Error("Expected a fresh dependency install, but the launcher did not report a completed install.");
+  }
+  if (process.env.SP_API_EXPECT_DEPENDENCIES_READY === "1" && !combinedOutput.includes("[SP-API] Dependencies are already up to date.")) {
+    throw new Error("Expected the second launch to reuse installed dependencies, but it did not.");
+  }
+
+  console.log(`[SP-API] Startup health check passed at ${url}.`);
 } finally {
   stopTree();
 }
