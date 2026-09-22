@@ -8,11 +8,14 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22, 24]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
       - run: npm run lint
@@ -23,12 +26,12 @@ jobs:
 
   windows-visual-studio-startup:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           cache: npm
 
       - name: Create clean ZIP-style project copy
@@ -41,7 +44,18 @@ jobs:
           Expand-Archive -Path $zip -DestinationPath $folder -Force
           "SP_API_ZIP_ROOT=$folder" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Fresh ZIP first launch
+      - name: Verified project-local Node fallback
+        shell: pwsh
+        run: |
+          Set-Location $env:SP_API_ZIP_ROOT
+          powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/ensure-node.ps1 -Architecture x64
+          $portableNode = Join-Path $env:SP_API_ZIP_ROOT ".sp-api-runtime\node-v22.23.2-win-x64\node.exe"
+          $version = & $portableNode --version
+          if ($version -ne "v22.23.2") {
+            throw "Unexpected portable Node version: $version"
+          }
+
+      - name: Fresh ZIP first launch on Node 22
         shell: pwsh
         run: |
           Set-Location $env:SP_API_ZIP_ROOT
