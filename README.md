@@ -62,7 +62,7 @@ The old buttons are represented as follows:
 
 ## Install and run
 
-### Visual Studio (recommended on Windows)
+### Visual Studio 2022 or newer
 
 You need:
 
@@ -73,10 +73,30 @@ Then:
 
 1. Download or clone this repository.
 2. If you downloaded a ZIP, extract it first.
-3. Open `SP-API.sln` in Visual Studio.
+3. Open `SP-API.sln`.
 4. Press the green **Run / F5** button.
 5. On the first run, wait while npm packages are installed automatically.
 6. The app will start at `http://localhost:3000`.
+
+### Visual Studio 2019
+
+Visual Studio 2019 uses the older Node.js project format, so use the separate VS 2019 solution included in this repository.
+
+You need:
+
+- Visual Studio 2019 with the **Node.js development** workload.
+- Node.js 24+ and npm.
+
+Then:
+
+1. Download or clone this repository.
+2. If you downloaded a ZIP, extract it first.
+3. Open `SP-API-VS2019.sln` — do **not** open `SP-API.sln` in VS 2019.
+4. Press the green **Run / F5** button.
+5. On the first run, wait while npm packages are installed automatically.
+6. The app will start at `http://localhost:3000`.
+
+Both Visual Studio solutions run the same Next.js application and use the same source code.
 
 After the first successful run, later starts should be much faster.
 
@@ -93,6 +113,7 @@ Then open `http://localhost:3000`.
 
 ### If something does not work
 
+- **Visual Studio says the project type was not found:** make sure you opened the correct solution for your Visual Studio version. For VS 2019 use `SP-API-VS2019.sln`; for VS 2022+ use `SP-API.sln`. Also install the **Node.js development** workload from Visual Studio Installer if it is missing.
 - **`npm` is not recognized:** install Node.js 24+ and reopen Visual Studio or the terminal.
 - **`next` is not recognized:** run `npm ci` in the project folder, then run again.
 - **First run looks stuck:** npm may still be downloading packages. Give it a few minutes. If there is still no progress, stop the run, check your internet connection, run `npm ci`, then try again.
