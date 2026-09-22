@@ -55,6 +55,15 @@ jobs:
           $env:SP_API_EXPECT_DEPENDENCIES_READY = "1"
           node scripts/verify-local-start.mjs
 
+      - name: Damaged dependency recovery
+        shell: pwsh
+        run: |
+          Set-Location $env:SP_API_ZIP_ROOT
+          Remove-Item "node_modules\next\package.json" -Force
+          Remove-Item Env:SP_API_EXPECT_DEPENDENCIES_READY -ErrorAction SilentlyContinue
+          $env:SP_API_EXPECT_INSTALL = "1"
+          node scripts/verify-local-start.mjs
+
       - name: Verify ZIP after startup bootstrap
         shell: pwsh
         run: |
