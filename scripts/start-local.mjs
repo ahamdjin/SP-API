@@ -10,6 +10,13 @@ const nextPath = resolve(root, "node_modules", "next", "package.json");
 const stampPath = resolve(root, "node_modules", ".sp-api-lock-hash");
 const isWindows = process.platform === "win32";
 
+function getChildEnv() {
+  const env = { ...process.env };
+  delete env.NODE_OPTIONS;
+  delete env.VSCODE_INSPECTOR_OPTIONS;
+  return env;
+}
+
 // Windows npm is a .cmd shim, so launch it through cmd.exe instead of spawning npm.cmd directly.
 function getNpmProcess(args) {
   if (isWindows) {
@@ -29,9 +36,16 @@ const lockHash = createHash("sha256")
   .update(readFileSync(lockPath))
   .digest("hex");
 
-const installedHash = existsSync(stampPath)
+let installedHash = existsSync(stampPath)
   ? readFileSync(stampPath, "utf8").trim()
   : "";
+
+// A manual npm ci may already have installed everything before this launcher runs.
+if (existsSync(nextPath) && !installedHash) {
+  console.log("[SP-API] Existing npm dependencies found.");
+  writeFileSync(stampPath, lockHash + "\n");
+  installedHash = lockHash;
+}
 
 if (!existsSync(nextPath) || installedHash !== lockHash) {
   console.log("[SP-API] Installing npm dependencies for this repo...");
@@ -39,6 +53,7 @@ if (!existsSync(nextPath) || installedHash !== lockHash) {
   const install = spawnSync(npmCi.command, npmCi.args, {
     cwd: root,
     stdio: "inherit",
+    env: getChildEnv(),
   });
 
   if (install.error) {
@@ -60,6 +75,7 @@ const npmDev = getNpmProcess(["run", "dev:visualstudio"]);
 const app = spawn(npmDev.command, npmDev.args, {
   cwd: root,
   stdio: ["inherit", "pipe", "pipe"],
+  env: getChildEnv(),
 });
 
 let browserOpened = false;
