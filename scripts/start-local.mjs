@@ -9,14 +9,16 @@ const lockPath = resolve(root, "package-lock.json");
 const nextPath = resolve(root, "node_modules", "next", "package.json");
 const stampPath = resolve(root, "node_modules", ".sp-api-lock-hash");
 const isWindows = process.platform === "win32";
+const noBrowser = process.env.SP_API_NO_BROWSER === "1";
 
 function getChildEnv() {
   const env = { ...process.env };
+
+  // Do not pass Visual Studio / VS Code debugger injection into npm and Next.js child processes.
   delete env.NODE_OPTIONS;
   delete env.VSCODE_INSPECTOR_OPTIONS;
 
-  // On Windows, trust certificates installed in the Windows certificate store.
-  // This keeps SSL verification enabled while supporting corporate/local root CAs.
+  // Keep SSL verification enabled while also trusting certificates installed in Windows.
   if (isWindows) {
     env.NODE_USE_SYSTEM_CA = "1";
   }
@@ -39,40 +41,70 @@ function getNpmProcess(args) {
   };
 }
 
+function runNpmSync(args, { capture = false } = {}) {
+  const npm = getNpmProcess(args);
+  return spawnSync(npm.command, npm.args, {
+    cwd: root,
+    env: getChildEnv(),
+    encoding: capture ? "utf8" : undefined,
+    stdio: capture ? ["ignore", "pipe", "pipe"] : "inherit",
+  });
+}
+
+function explainInstallFailure(result) {
+  const output = [result.stdout, result.stderr, result.error?.message]
+    .filter(Boolean)
+    .join("\n");
+
+  if (/UNABLE_TO_VERIFY_LEAF_SIGNATURE|SELF_SIGNED_CERT_IN_CHAIN|CERT_UNTRUSTED/i.test(output)) {
+    console.error("\n[SP-API] npm could not verify your network certificate.");
+    console.error("[SP-API] Windows system certificates are already enabled for this launcher.");
+    console.error("[SP-API] If this still fails, the company/network root CA is not trusted by Windows on this PC.");
+    console.error("[SP-API] Ask IT to install the correct root CA, or configure npm with the approved CA file. Do not disable SSL verification.\n");
+    return;
+  }
+
+  if (/ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|ECONNREFUSED/i.test(output)) {
+    console.error("\n[SP-API] npm could not reach the package registry. Check the internet/proxy connection and try again.\n");
+  }
+}
+
 const lockHash = createHash("sha256")
   .update(readFileSync(lockPath))
   .digest("hex");
 
-let installedHash = existsSync(stampPath)
+const installedHash = existsSync(stampPath)
   ? readFileSync(stampPath, "utf8").trim()
   : "";
 
-// A manual npm ci may already have installed everything before this launcher runs.
-if (existsSync(nextPath) && !installedHash) {
-  console.log("[SP-API] Existing npm dependencies found.");
-  writeFileSync(stampPath, lockHash + "\n");
-  installedHash = lockHash;
-}
-
 if (!existsSync(nextPath) || installedHash !== lockHash) {
+  console.log("[SP-API] Checking npm registry connection...");
+  const registryCheck = runNpmSync(["ping", "--silent"], { capture: true });
+
+  if (registryCheck.error || registryCheck.status !== 0) {
+    if (registryCheck.stdout) process.stdout.write(registryCheck.stdout);
+    if (registryCheck.stderr) process.stderr.write(registryCheck.stderr);
+    explainInstallFailure(registryCheck);
+    process.exit(registryCheck.status ?? 1);
+  }
+
+  console.log("[SP-API] Registry connection OK.");
   console.log("[SP-API] Installing npm dependencies for this repo...");
-  const npmCi = getNpmProcess(["ci"]);
-  const install = spawnSync(npmCi.command, npmCi.args, {
-    cwd: root,
-    stdio: "inherit",
-    env: getChildEnv(),
-  });
+  const install = runNpmSync(["ci", "--no-audit", "--no-fund"]);
 
   if (install.error) {
     console.error("[SP-API] Could not start npm ci:", install.error.message);
+    explainInstallFailure(install);
     process.exit(1);
   }
 
   if (install.status !== 0) {
+    explainInstallFailure(install);
     process.exit(install.status ?? 1);
   }
 
   writeFileSync(stampPath, lockHash + "\n");
+  console.log("[SP-API] Dependencies installed successfully.");
 } else {
   console.log("[SP-API] Dependencies are already up to date.");
 }
@@ -92,7 +124,7 @@ function handleServerOutput(chunk, stream) {
   const text = chunk.toString();
   stream.write(text);
 
-  if (browserOpened) return;
+  if (browserOpened || noBrowser) return;
 
   const match = text.match(/Local:\s+(https?:\/\/[^\s]+)/i);
   if (!match) return;
@@ -101,11 +133,7 @@ function handleServerOutput(chunk, stream) {
   const url = match[1].replace(/\u001b\[[0-9;]*m/g, "");
 
   if (isWindows) {
-    // Use the Windows URL handler directly; avoids cmd.exe/start quoting issues.
-    const browser = spawn("rundll32.exe", [
-      "url.dll,FileProtocolHandler",
-      url,
-    ], {
+    const browser = spawn("rundll32.exe", ["url.dll,FileProtocolHandler", url], {
       detached: true,
       stdio: "ignore",
     });
