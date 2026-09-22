@@ -56,7 +56,7 @@ if (!existsSync(nextPath) || installedHash !== lockHash) {
 }
 
 console.log("[SP-API] Starting Next.js...");
-const npmDev = getNpmProcess(["run", "dev"]);
+const npmDev = getNpmProcess(["run", "dev:visualstudio"]);
 const app = spawn(npmDev.command, npmDev.args, {
   cwd: root,
   stdio: ["inherit", "pipe", "pipe"],
@@ -78,11 +78,10 @@ function handleServerOutput(chunk, stream) {
   const url = match[1].replace(/\u001b\[[0-9;]*m/g, "");
 
   if (isWindows) {
-    const browser = spawn(process.env.ComSpec || "cmd.exe", [
-      "/d",
-      "/s",
-      "/c",
-      `start "" "${url}"`,
+    // Use the Windows URL handler directly; avoids cmd.exe/start quoting issues.
+    const browser = spawn("rundll32.exe", [
+      "url.dll,FileProtocolHandler",
+      url,
     ], {
       detached: true,
       stdio: "ignore",
