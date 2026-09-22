@@ -118,7 +118,7 @@ Then open `http://localhost:3000`.
 - **Turbopack crashes while reading a file inside `.vs\FileContentIndex`:** your ZIP is older than the VS compatibility fix. Download the latest ZIP. Visual Studio runs use Webpack and Tailwind only scans the `src` folder, so the Visual Studio cache is not read.
 - **`npm` is not recognized:** install Node.js 24+ and reopen Visual Studio or the terminal.
 - **`next` is not recognized:** run `npm ci` in the project folder, then run again.
-- **First run looks stuck:** npm may still be downloading packages. Give it a few minutes. If there is still no progress, stop the run, check your internet connection, run `npm ci`, then try again.
+- **First run looks stuck:** npm may still be downloading packages. Give it a few minutes. If there is still no progress, stop the run, check your internet connection, run `npm ci`, then try again. The latest VS 2019 launcher also avoids opening the browser until Next.js is actually ready.
 - **Dependencies look broken:** close the app, delete the `node_modules` folder, run `npm ci`, and start again.
 - **Port 3000 is already in use:** close the other local Next.js/Node app using that port, then start this project again.
 - **Hydration warning mentions a browser-extension attribute:** disable that extension for `localhost` or test in a private/incognito window. The app also suppresses harmless root-level extension attribute mismatches.
