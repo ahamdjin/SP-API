@@ -7,6 +7,7 @@ const vs2019 = readFileSync(new URL("../SP-API-VS2019.njsproj", import.meta.url)
 const vs2022 = readFileSync(new URL("../SP-API.esproj", import.meta.url), "utf8");
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const launcher = readFileSync(new URL("../scripts/start-local.mjs", import.meta.url), "utf8");
+const nodeProvisioner = readFileSync(new URL("../scripts/ensure-node.ps1", import.meta.url), "utf8");
 const ci = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 
 test("Visual Studio launch paths use the shared bootstrap", () => {
@@ -22,9 +23,19 @@ test("VS 2019 does not open the browser before Next.js is ready", () => {
   assert.match(launcher, /SP_API_NO_BROWSER/);
 });
 
-test("launcher rejects unsupported old Node versions early", () => {
-  assert.match(launcher, /nodeMajor < 24/);
-  assert.match(launcher, /Node\.js 24 or newer is required/);
+test("launcher follows Next.js 16 minimum Node version and keeps Node 22 supported", () => {
+  assert.match(launcher, /minimumNode = \{ major: 20, minor: 9 \}/);
+  assert.match(launcher, /portableNodeVersion = "22\.23\.2"/);
+  assert.doesNotMatch(launcher, /Node\.js 24 or newer is required/);
+  assert.equal(packageJson.engines.node, ">=20.9.0");
+});
+
+test("old Windows Node can provision a verified project-local Node 22 runtime", () => {
+  assert.match(launcher, /provisionPortableNode/);
+  assert.match(launcher, /ensure-node\.ps1/);
+  assert.match(nodeProvisioner, /22\.23\.2/);
+  assert.match(nodeProvisioner, /Get-FileHash -Algorithm SHA256/);
+  assert.match(nodeProvisioner, /1177b4137ba5adaa56354ae40f1080c7450e8ae09cecb47da459d1c52ac99f97/);
 });
 
 test("Visual Studio dev mode uses Webpack and keeps TLS verification enabled", () => {
@@ -53,4 +64,7 @@ test("CI exercises the exact ZIP-style Windows first-run and second-run paths", 
   assert.match(ci, /Damaged dependency recovery/);
   assert.match(ci, /node_modules\\next\\package\.json/);
   assert.match(ci, /verify-production-start\.mjs/);
+  assert.match(ci, /node-version: 22/);
+  assert.match(ci, /node-version: \[22, 24\]/);
+  assert.match(ci, /Verified project-local Node fallback/);
 });
