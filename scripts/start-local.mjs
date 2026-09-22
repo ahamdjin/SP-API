@@ -59,8 +59,40 @@ console.log("[SP-API] Starting Next.js...");
 const npmDev = getNpmProcess(["run", "dev"]);
 const app = spawn(npmDev.command, npmDev.args, {
   cwd: root,
-  stdio: "inherit",
+  stdio: ["inherit", "pipe", "pipe"],
 });
+
+let browserOpened = false;
+
+// Open the actual Next.js URL only after the dev server reports that it is ready.
+function handleServerOutput(chunk, stream) {
+  const text = chunk.toString();
+  stream.write(text);
+
+  if (browserOpened) return;
+
+  const match = text.match(/Local:\\s+(https?:\\/\\/[^\\s]+)/i);
+  if (!match) return;
+
+  browserOpened = true;
+  const url = match[1].replace(/\\u001b\\[[0-9;]*m/g, "");
+
+  if (isWindows) {
+    const browser = spawn(process.env.ComSpec || "cmd.exe", [
+      "/d",
+      "/s",
+      "/c",
+      `start "" "${url}"`,
+    ], {
+      detached: true,
+      stdio: "ignore",
+    });
+    browser.unref();
+  }
+}
+
+app.stdout.on("data", (chunk) => handleServerOutput(chunk, process.stdout));
+app.stderr.on("data", (chunk) => handleServerOutput(chunk, process.stderr));
 
 app.on("error", (error) => {
   console.error("[SP-API] Could not start the app:", error.message);
