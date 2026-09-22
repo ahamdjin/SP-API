@@ -14,6 +14,13 @@ function getChildEnv() {
   const env = { ...process.env };
   delete env.NODE_OPTIONS;
   delete env.VSCODE_INSPECTOR_OPTIONS;
+
+  // On Windows, trust certificates installed in the Windows certificate store.
+  // This keeps SSL verification enabled while supporting corporate/local root CAs.
+  if (isWindows) {
+    env.NODE_USE_SYSTEM_CA = "1";
+  }
+
   return env;
 }
 
