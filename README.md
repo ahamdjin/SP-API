@@ -114,6 +114,7 @@ Then open `http://localhost:3000`.
 ### If something does not work
 
 - **Visual Studio says the project type was not found:** make sure you opened the correct solution for your Visual Studio version. For VS 2019 use `SP-API-VS2019.sln`; for VS 2022+ use `SP-API.sln`. Also install the **Node.js development** workload from Visual Studio Installer if it is missing.
+- **Visual Studio says `node-terminal` was not found:** your ZIP is older than the VS 2019 compatibility fix. Download the latest ZIP and open `SP-API-VS2019.sln` again.
 - **`npm` is not recognized:** install Node.js 24+ and reopen Visual Studio or the terminal.
 - **`next` is not recognized:** run `npm ci` in the project folder, then run again.
 - **First run looks stuck:** npm may still be downloading packages. Give it a few minutes. If there is still no progress, stop the run, check your internet connection, run `npm ci`, then try again.
