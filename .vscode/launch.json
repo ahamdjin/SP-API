@@ -3,15 +3,10 @@
   "configurations": [
     {
       "name": "SP-API Local",
-      "type": "node-terminal",
+      "type": "node",
       "request": "launch",
-      "command": "npm run visualstudio",
-      "cwd": "${workspaceFolder}",
-      "serverReadyAction": {
-        "pattern": "Local:\\s+(https?://\\S+)",
-        "uriFormat": "%s",
-        "action": "openExternally"
-      }
+      "program": "${workspaceFolder}/scripts/start-vs2019.js",
+      "cwd": "${workspaceFolder}"
     }
   ]
 }
