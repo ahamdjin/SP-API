@@ -10,11 +10,72 @@ const nextPath = resolve(root, "node_modules", "next", "package.json");
 const stampPath = resolve(root, "node_modules", ".sp-api-lock-hash");
 const isWindows = process.platform === "win32";
 const noBrowser = process.env.SP_API_NO_BROWSER === "1";
-const nodeMajor = Number(process.versions.node.split(".")[0]);
+const minimumNode = { major: 20, minor: 9 };
+const portableNodeVersion = "22.23.2";
 
-if (!Number.isInteger(nodeMajor) || nodeMajor < 24) {
-  console.error(`[SP-API] Node.js 24 or newer is required. Current version: ${process.versions.node}`);
-  console.error("[SP-API] Install Node.js 24+, then reopen Visual Studio and run again.");
+function isSupportedNode(version) {
+  const [major, minor] = version.split(".").map(Number);
+  return Number.isInteger(major)
+    && Number.isInteger(minor)
+    && (major > minimumNode.major || (major === minimumNode.major && minor >= minimumNode.minor));
+}
+
+function portableNodePath() {
+  const platform = process.arch === "arm64" ? "win-arm64" : process.arch === "ia32" ? "win-x86" : "win-x64";
+  return resolve(root, ".sp-api-runtime", `node-v${portableNodeVersion}-${platform}`, "node.exe");
+}
+
+function provisionPortableNode() {
+  if (!isWindows) return "";
+
+  console.log(
+    `[SP-API] Node.js ${process.versions.node} is older than Next.js requires. Installing a project-local Node.js ${portableNodeVersion} runtime...`,
+  );
+
+  const powershell = process.env.SystemRoot
+    ? resolve(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+    : "powershell.exe";
+
+  const provision = spawnSync(
+    powershell,
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "ensure-node.ps1"),
+      "-Architecture",
+      process.arch,
+    ],
+    { cwd: root, stdio: "inherit" },
+  );
+
+  if (provision.error || provision.status !== 0 || !existsSync(portableNodePath())) {
+    console.error("[SP-API] Automatic project-local Node.js setup failed.");
+    if (provision.error) console.error("[SP-API]", provision.error.message);
+    return "";
+  }
+
+  return portableNodePath();
+}
+
+if (!isSupportedNode(process.versions.node)) {
+  const portableNode = process.env.SP_API_BOOTSTRAPPED_NODE === "1" ? "" : provisionPortableNode();
+
+  if (portableNode) {
+    const rerun = spawnSync(portableNode, [fileURLToPath(import.meta.url)], {
+      cwd: root,
+      stdio: "inherit",
+      env: { ...process.env, SP_API_BOOTSTRAPPED_NODE: "1" },
+    });
+    process.exit(rerun.status ?? 1);
+  }
+
+  console.error(
+    `[SP-API] This app requires Node.js 20.9 or newer. Current version: ${process.versions.node}`,
+  );
+  console.error("[SP-API] Node.js 22 LTS is recommended.");
   process.exit(1);
 }
 
@@ -33,8 +94,16 @@ function getChildEnv() {
   return env;
 }
 
-// Windows npm is a .cmd shim, so launch it through cmd.exe instead of spawning npm.cmd directly.
+// Prefer npm bundled beside the Node executable so a project-local fallback runtime works without changing PATH.
 function getNpmProcess(args) {
+  const npmCli = resolve(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
+  if (existsSync(npmCli)) {
+    return {
+      command: process.execPath,
+      args: [npmCli, ...args],
+    };
+  }
+
   if (isWindows) {
     return {
       command: process.env.ComSpec || "cmd.exe",
