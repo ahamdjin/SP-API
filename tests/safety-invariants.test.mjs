@@ -6,6 +6,7 @@ const spApi = readFileSync(new URL("../src/lib/sp-api.ts", import.meta.url), "ut
 const catalogRoute = readFileSync(new URL("../src/app/api/sp-api/catalog/route.ts", import.meta.url), "utf8");
 const feesRoute = readFileSync(new URL("../src/app/api/sp-api/fees/route.ts", import.meta.url), "utf8");
 const operationsRoute = readFileSync(new URL("../src/app/api/sp-api/operations/route.ts", import.meta.url), "utf8");
+const testRoute = readFileSync(new URL("../src/app/api/sp-api/test/route.ts", import.meta.url), "utf8");
 
 test("non-GET SP-API calls use write-safe retry mode", () => {
   assert.match(spApi, /method === "GET" \? "read" : "write"/);
@@ -42,4 +43,74 @@ test("production blocks Amazon's removed legacy listings feed types", () => {
   assert.match(operationsRoute, /POST_PRODUCT_DATA/);
   assert.match(operationsRoute, /input\.environment === "production"/);
   assert.match(operationsRoute, /JSON_LISTINGS_FEED/);
+});
+
+
+test("core SP-API request paths stay aligned with current Amazon models", () => {
+  assert.match(testRoute, /\/sellers\/v1\/marketplaceParticipations/);
+
+  const expectedPaths = [
+    "/fba/inventory/v1/summaries",
+    "/orders/2026-01-01/orders",
+    "/reports/2021-06-30/reports",
+    "/reports/2021-06-30/documents/",
+    "/feeds/2021-06-30/feeds",
+    "/feeds/2021-06-30/documents",
+    "/inbound/fba/2024-03-20/inboundPlans",
+    "/inbound/fba/2024-03-20/items/prepDetails",
+    "/inbound/fba/2024-03-20/items/labels",
+    "/inbound/fba/2024-03-20/operations/",
+    "/fba/inbound/v0/shipments/",
+  ];
+
+  for (const path of expectedPaths) {
+    assert.ok(operationsRoute.includes(path), "missing Amazon request path: " + path);
+  }
+
+  assert.match(catalogRoute, /\/catalog\/2022-04-01\/items/);
+  assert.match(feesRoute, /\/products\/fees\/v0\//);
+});
+
+test("create report and create feed accept Amazon's current 25-marketplace maximum", () => {
+  assert.match(
+    operationsRoute,
+    /csvValues\(optionalString\(fields, "reportMarketplaceIds"\), 25\)/,
+  );
+  assert.match(
+    operationsRoute,
+    /csvValues\(optionalString\(fields, "feedMarketplaceIds"\), 25\)/,
+  );
+});
+
+test("list report and list feed filters keep Amazon's 10-marketplace maximum", () => {
+  assert.match(operationsRoute, /csvValues\(optionalString\(fields, "reportMarketplaceIds"\), 10\)/);
+  assert.match(operationsRoute, /csvValues\(optionalString\(fields, "feedMarketplaceIds"\), 10\)/);
+});
+
+test("Orders 2026 request enums and PII datasets remain current", () => {
+  for (const value of [
+    "PENDING_AVAILABILITY",
+    "PENDING",
+    "UNSHIPPED",
+    "PARTIALLY_SHIPPED",
+    "SHIPPED",
+    "CANCELLED",
+    "UNFULFILLABLE",
+    "MERCHANT",
+    "AMAZON",
+    "BUYER",
+    "RECIPIENT",
+    "FULFILLMENT_ORDERS",
+    "TAX",
+    "PAYMENT",
+  ]) {
+    assert.ok(operationsRoute.includes(value), "missing Orders 2026 value: " + value);
+  }
+});
+
+test("prep-details request preserves Amazon's required double encoding", () => {
+  assert.match(operationsRoute, /replaceAll\("%", "%25"\)/);
+  assert.match(operationsRoute, /replaceAll\("\+", "%2B"\)/);
+  assert.match(operationsRoute, /replaceAll\(",", "%2C"\)/);
+  assert.match(operationsRoute, /params\.append\("mskus"/);
 });
