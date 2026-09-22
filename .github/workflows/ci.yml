@@ -18,3 +18,20 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+
+  windows-visual-studio-startup:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Fresh Windows / VS2019-style startup
+        run: node scripts/verify-local-start.mjs
+      - name: Verify after startup bootstrap
+        run: |
+          npm run lint
+          npm test
+          npm run build
