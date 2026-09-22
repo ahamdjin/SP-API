@@ -18,20 +18,48 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      - name: Production server health
+        run: node scripts/verify-production-start.mjs
 
   windows-visual-studio-startup:
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-      - name: Fresh Windows / VS2019-style startup
-        run: node scripts/verify-local-start.mjs
-      - name: Verify after startup bootstrap
+
+      - name: Create clean ZIP-style project copy
+        shell: pwsh
         run: |
+          $zip = Join-Path $env:RUNNER_TEMP "sp-api.zip"
+          $folder = Join-Path $env:RUNNER_TEMP "sp-api-zip"
+          git archive --format=zip --output=$zip HEAD
+          New-Item -ItemType Directory -Path $folder -Force | Out-Null
+          Expand-Archive -Path $zip -DestinationPath $folder -Force
+          "SP_API_ZIP_ROOT=$folder" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Fresh ZIP first launch
+        shell: pwsh
+        run: |
+          Set-Location $env:SP_API_ZIP_ROOT
+          $env:SP_API_EXPECT_INSTALL = "1"
+          node scripts/verify-local-start.mjs
+
+      - name: ZIP second launch reuses dependencies
+        shell: pwsh
+        run: |
+          Set-Location $env:SP_API_ZIP_ROOT
+          $env:SP_API_EXPECT_DEPENDENCIES_READY = "1"
+          node scripts/verify-local-start.mjs
+
+      - name: Verify ZIP after startup bootstrap
+        shell: pwsh
+        run: |
+          Set-Location $env:SP_API_ZIP_ROOT
           npm run lint
           npm test
           npm run build
+          node scripts/verify-production-start.mjs
