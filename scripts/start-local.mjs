@@ -10,6 +10,13 @@ const nextPath = resolve(root, "node_modules", "next", "package.json");
 const stampPath = resolve(root, "node_modules", ".sp-api-lock-hash");
 const isWindows = process.platform === "win32";
 const noBrowser = process.env.SP_API_NO_BROWSER === "1";
+const nodeMajor = Number(process.versions.node.split(".")[0]);
+
+if (!Number.isInteger(nodeMajor) || nodeMajor < 24) {
+  console.error(`[SP-API] Node.js 24 or newer is required. Current version: ${process.versions.node}`);
+  console.error("[SP-API] Install Node.js 24+, then reopen Visual Studio and run again.");
+  process.exit(1);
+}
 
 function getChildEnv() {
   const env = { ...process.env };
