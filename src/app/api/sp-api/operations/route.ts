@@ -139,7 +139,7 @@ export async function POST(request: Request) {
         requireConfirmation(fields);
         const range = optionalDateRange(fields);
         validateOptionalRange(range.dataStartTime, range.dataEndTime, "dataStartTime", "dataEndTime");
-        const marketplaceIds = csvValues(optionalString(fields, "reportMarketplaceIds"), 10);
+        const marketplaceIds = csvValues(optionalString(fields, "reportMarketplaceIds"), 25);
         const requestedMarketplaces = marketplaceIds.length ? marketplaceIds : [input.marketplaceId];
         validateMarketplaceRegions(input, requestedMarketplaces, "reportMarketplaceIds");
         result = await call(input, "/reports/2021-06-30/reports", "POST", {
@@ -368,7 +368,7 @@ async function submitFeed(input: Input, fields: Fields) {
 
   const contentType = optionalString(fields, "contentType") || "application/json; charset=UTF-8";
   const content = stringField(fields, "content");
-  const marketplaceIds = csvValues(optionalString(fields, "feedMarketplaceIds"), 10);
+  const marketplaceIds = csvValues(optionalString(fields, "feedMarketplaceIds"), 25);
   const requestedMarketplaces = marketplaceIds.length ? marketplaceIds : [input.marketplaceId];
   validateMarketplaceRegions(input, requestedMarketplaces, "feedMarketplaceIds");
 
