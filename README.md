@@ -75,8 +75,8 @@ Then:
 2. If you downloaded a ZIP, extract it first.
 3. Open `SP-API.sln`.
 4. Press the green **Run / F5** button.
-5. On the first run, wait while npm packages are installed automatically.
-6. The app will start at `http://localhost:3000`.
+5. On the first run, wait while the launcher checks the npm connection and installs packages automatically.
+6. The browser opens only after Next.js is ready at `http://localhost:3000`.
 
 ### Visual Studio 2019
 
@@ -118,11 +118,16 @@ Then open `http://localhost:3000`.
 - **Turbopack crashes while reading a file inside `.vs\FileContentIndex`:** your ZIP is older than the VS compatibility fix. Download the latest ZIP. Visual Studio runs use Webpack and Tailwind only scans the `src` folder, so the Visual Studio cache is not read.
 - **`npm` is not recognized:** install Node.js 24+ and reopen Visual Studio or the terminal.
 - **`next` is not recognized:** run `npm ci` in the project folder, then run again.
-- **First run looks stuck:** npm may still be downloading packages. Give it a few minutes. If there is still no progress, stop the run and check your internet connection. The Visual Studio launcher waits for installation to finish before starting Next.js.
-- **`UNABLE_TO_VERIFY_LEAF_SIGNATURE`:** on Windows, the Visual Studio launcher automatically tells Node to use the Windows certificate store. If a manual terminal install is needed, run `$env:NODE_USE_SYSTEM_CA="1"` and then `npm ci`. Do not disable SSL verification.
+- **First run looks stuck:** the launcher first checks the npm registry, then installs packages. If the registry check or install fails, read the error shown in the same window instead of waiting indefinitely.
+- **`UNABLE_TO_VERIFY_LEAF_SIGNATURE`:** the Windows launcher already enables the Windows certificate store. If this error still appears, the PC does not trust the company/network root certificate; ask IT for the approved CA or configure npm with that approved CA file. Do not disable SSL verification.
+- **A previous `npm ci` failed:** just run the Visual Studio solution again after fixing the reported network/certificate problem. The launcher only marks dependencies as ready after a complete successful install.
 - **Dependencies look broken:** close the app, delete the `node_modules` folder, run `npm ci`, and start again.
 - **Port 3000 is already in use:** close the other local Next.js/Node app using that port, then start this project again.
 - **Hydration warning mentions a browser-extension attribute:** disable that extension for `localhost` or test in a private/incognito window. The app also suppresses harmless root-level extension attribute mismatches.
+
+## Automated verification
+
+GitHub Actions verifies the normal install/lint/test/build flow on Linux and also performs a fresh Windows startup using the same VS 2019 wrapper. The Windows job waits for `/api/health` before passing, which catches first-run/bootstrap regressions before a ZIP is handed to a client.
 
 ## Verify a production build
 
