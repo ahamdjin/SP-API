@@ -7,6 +7,7 @@ const vs2019 = readFileSync(new URL("../SP-API-VS2019.njsproj", import.meta.url)
 const vs2022 = readFileSync(new URL("../SP-API.esproj", import.meta.url), "utf8");
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const launcher = readFileSync(new URL("../scripts/start-local.mjs", import.meta.url), "utf8");
+const ci = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 
 test("Visual Studio launch paths use the shared bootstrap", () => {
   assert.match(launch, /"type": "node"/);
@@ -37,4 +38,12 @@ test("dependency stamp is written only after npm ci succeeds", () => {
   assert.ok(installSuccessCheck > installStart);
   assert.ok(stampWrite > installSuccessCheck);
   assert.doesNotMatch(launcher, /Existing npm dependencies found/);
+});
+
+
+test("CI exercises the exact ZIP-style Windows first-run and second-run paths", () => {
+  assert.match(ci, /git archive --format=zip/);
+  assert.match(ci, /SP_API_EXPECT_INSTALL/);
+  assert.match(ci, /SP_API_EXPECT_DEPENDENCIES_READY/);
+  assert.match(ci, /verify-production-start\.mjs/);
 });
