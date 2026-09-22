@@ -23,6 +23,7 @@
 /build
 
 # misc
+/.sp-api-runtime/
 /.vs/
 .DS_Store
 *.pem
