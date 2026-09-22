@@ -71,11 +71,11 @@ function handleServerOutput(chunk, stream) {
 
   if (browserOpened) return;
 
-  const match = text.match(/Local:\\s+(https?:\\/\\/[^\\s]+)/i);
+  const match = text.match(/Local:\s+(https?:\/\/[^\s]+)/i);
   if (!match) return;
 
   browserOpened = true;
-  const url = match[1].replace(/\\u001b\\[[0-9;]*m/g, "");
+  const url = match[1].replace(/\u001b\[[0-9;]*m/g, "");
 
   if (isWindows) {
     const browser = spawn(process.env.ComSpec || "cmd.exe", [
