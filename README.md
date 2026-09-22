@@ -22,7 +22,7 @@ Amazon write operations are clearly marked and require an explicit confirmation 
 
 ## Connected endpoint coverage
 
-Every non-legacy button visible in the workbench is connected to a current Amazon operation. The method and path mapping was audited against Amazon's official `selling-partner-api-models` repository at commit `3659f96867bfc669aca7a524c2f95744ff0e4478` (2026-08-26).
+Every non-legacy button visible in the workbench is connected to a current Amazon operation. The method and path mapping was audited against Amazon's official `selling-partner-api-models` repository at commit `713565ff394d136629a342120872e65cb073d162` (2026-09-22).
 
 | Area | Connected operations |
 | --- | --- |
@@ -67,7 +67,7 @@ The old buttons are represented as follows:
 You need:
 
 - Visual Studio 2022 or newer with the **Node.js development** workload.
-- Node.js 24+ and npm.
+- Node.js 22 LTS is recommended. Next.js 16 supports Node.js 20.9+.
 
 Then:
 
@@ -75,8 +75,9 @@ Then:
 2. If you downloaded a ZIP, extract it first.
 3. Open `SP-API.sln`.
 4. Press the green **Run / F5** button.
-5. On the first run, wait while the launcher checks the npm connection and installs packages automatically.
-6. The browser opens only after Next.js is ready at `http://localhost:3000`.
+5. On the first run, wait while the launcher checks the installed Node version, checks npm connectivity, and installs project packages automatically.
+6. Node.js 20.9+ is used as-is. If an older Node version is detected on Windows, the launcher downloads a verified project-local Node.js 22 runtime and continues without replacing the system installation.
+7. The browser opens only after Next.js is ready at `http://localhost:3000`.
 
 ### Visual Studio 2019
 
@@ -85,7 +86,7 @@ Visual Studio 2019 uses the older Node.js project format, so use the separate VS
 You need:
 
 - Visual Studio 2019 with the **Node.js development** workload.
-- Node.js 24+ and npm.
+- Node.js 22 LTS is recommended. Next.js 16 supports Node.js 20.9+.
 
 Then:
 
@@ -93,8 +94,9 @@ Then:
 2. If you downloaded a ZIP, extract it first.
 3. Open `SP-API-VS2019.sln` — do **not** open `SP-API.sln` in VS 2019.
 4. Press the green **Run / F5** button.
-5. On the first run, wait while npm packages are installed automatically.
-6. The app will start at `http://localhost:3000`.
+5. On the first run, wait while the launcher checks Node/npm and installs project packages automatically.
+6. Existing Node.js 22 works directly. If the installed Node version is older than 20.9 on Windows, the launcher provisions a verified project-local Node.js 22 runtime automatically.
+7. The app will start at `http://localhost:3000`.
 
 Both Visual Studio solutions run the same Next.js application and use the same source code.
 
@@ -116,9 +118,9 @@ Then open `http://localhost:3000`.
 - **Visual Studio says the project type was not found:** make sure you opened the correct solution for your Visual Studio version. For VS 2019 use `SP-API-VS2019.sln`; for VS 2022+ use `SP-API.sln`. Also install the **Node.js development** workload from Visual Studio Installer if it is missing.
 - **Visual Studio says `node-terminal` was not found:** your ZIP is older than the VS 2019 compatibility fix. Download the latest ZIP and open `SP-API-VS2019.sln` again.
 - **Turbopack crashes while reading a file inside `.vs\FileContentIndex`:** your ZIP is older than the VS compatibility fix. Download the latest ZIP. Visual Studio runs use Webpack and Tailwind only scans the `src` folder, so the Visual Studio cache is not read.
-- **`npm` is not recognized:** install Node.js 24+ and reopen Visual Studio or the terminal.
+- **`npm` is not recognized:** use Node.js 20.9+ (Node.js 22 LTS recommended) and reopen Visual Studio or the terminal.
 - **`next` is not recognized:** run `npm ci` in the project folder, then run again.
-- **First run looks stuck:** the launcher first checks the npm registry, then installs packages. If the registry check or install fails, read the error shown in the same window instead of waiting indefinitely.
+- **First run looks stuck:** the launcher first checks the Node version and npm registry, then installs packages. If the installed Node is older than 20.9 on Windows, it first downloads a verified project-local Node.js 22 runtime. If a registry/download/install step fails, read the error shown in the same window instead of waiting indefinitely.
 - **`UNABLE_TO_VERIFY_LEAF_SIGNATURE`:** the Windows launcher already enables the Windows certificate store. If this error still appears, the PC does not trust the company/network root certificate; ask IT for the approved CA or configure npm with that approved CA file. Do not disable SSL verification.
 - **A previous `npm ci` failed:** just run the Visual Studio solution again after fixing the reported network/certificate problem. The launcher only marks dependencies as ready after a complete successful install.
 - **Dependencies look broken:** close the app, delete the `node_modules` folder, run `npm ci`, and start again.
@@ -127,7 +129,7 @@ Then open `http://localhost:3000`.
 
 ## Automated verification
 
-GitHub Actions verifies the normal install/lint/test/build flow on Linux and also performs a fresh Windows startup using the same VS 2019 wrapper. The Windows job waits for `/api/health` before passing, which catches first-run/bootstrap regressions before a ZIP is handed to a client.
+GitHub Actions verifies install/lint/test/build/production-health on Node.js 22 and 24. The Windows job runs the ZIP/VS 2019-style startup on Node.js 22, verifies the project-local Node fallback download and checksum, tests first and second launch behavior, repairs a deliberately damaged dependency install, and waits for `/api/health` before passing.
 
 ## Verify a production build
 
