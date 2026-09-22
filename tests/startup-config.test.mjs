@@ -22,6 +22,11 @@ test("VS 2019 does not open the browser before Next.js is ready", () => {
   assert.match(launcher, /SP_API_NO_BROWSER/);
 });
 
+test("launcher rejects unsupported old Node versions early", () => {
+  assert.match(launcher, /nodeMajor < 24/);
+  assert.match(launcher, /Node\.js 24 or newer is required/);
+});
+
 test("Visual Studio dev mode uses Webpack and keeps TLS verification enabled", () => {
   assert.equal(packageJson.scripts["dev:visualstudio"], "next dev --webpack");
   assert.match(launcher, /NODE_USE_SYSTEM_CA = "1"/);
@@ -45,5 +50,7 @@ test("CI exercises the exact ZIP-style Windows first-run and second-run paths", 
   assert.match(ci, /git archive --format=zip/);
   assert.match(ci, /SP_API_EXPECT_INSTALL/);
   assert.match(ci, /SP_API_EXPECT_DEPENDENCIES_READY/);
+  assert.match(ci, /Damaged dependency recovery/);
+  assert.match(ci, /node_modules\\next\\package\.json/);
   assert.match(ci, /verify-production-start\.mjs/);
 });
